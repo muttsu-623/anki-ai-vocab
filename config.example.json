@@ -1,0 +1,7 @@
+{
+  "deck_name": "English Vocabulary",
+  "model_name": "Basic",
+  "openai_api_key": "your-openai-api-key-here",
+  "anki_host": "localhost",
+  "anki_port": 8765
+}
