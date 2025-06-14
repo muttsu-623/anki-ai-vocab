@@ -6,7 +6,7 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
 
 - Fetches word information using OpenAI's GPT model:
   - Japanese meaning
-  - English definition
+  - English definition with parts of speech [noun], [verb], [adjective], etc.
   - IPA pronunciation
   - Related idioms/phrases
   - Example sentences
@@ -160,12 +160,13 @@ Fetching information for 'ubiquitous'...
 
 Word information retrieved:
   Japanese: 遍在する、至る所にある
-  English: Present, appearing, or found everywhere
+  English: 
+    1. [adjective] Present, appearing, or found everywhere
   IPA: /juːˈbɪkwɪtəs/
   Idiom: N/A
   Example: Smartphones have become ubiquitous in modern society.
 
-Generating audio with voice 'Joanna'...
+Generating audio with voice 'Matthew'...
 ✓ Audio files generated successfully
 
 Adding to Anki...
@@ -174,16 +175,16 @@ Adding to Anki...
 
 ## Troubleshooting
 
-- **"Cannot connect to Anki"**: 
+- **"Cannot connect to Anki"**:
   - Make sure Anki is running with AnkiConnect installed
   - For Linux users, ensure you're using the correct network configuration
   - Check that AnkiConnect is accessible at `http://localhost:8765`
 
-- **"OpenAI API key not found"**: 
+- **"OpenAI API key not found"**:
   - Ensure your `.env` file contains the correct API key
   - The `.env` file should be in the same directory as `docker-compose.yml`
 
-- **"Duplicate card"**: 
+- **"Duplicate card"**:
   - The word already exists in your deck
   - The tool prevents duplicates by default
 
@@ -191,10 +192,10 @@ Adding to Anki...
 
 The tool creates cards with:
 - **Front**: Word and IPA pronunciation
-- **Back**: 
+- **Back**:
   - Word audio playback button (when audio enabled)
   - Japanese meaning
-  - English definition  
+  - English definition
   - Idioms/phrases (if any)
   - Example sentence
   - Example sentence audio playback button (when audio enabled)

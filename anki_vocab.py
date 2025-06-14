@@ -9,9 +9,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from openai import OpenAI
 import boto3
 from dotenv import load_dotenv
+from openai import OpenAI
 
 
 class AnkiConnector:
@@ -113,24 +113,32 @@ class VocabularyFetcher:
         Please provide the following information for the English word "{word}":
         1. Japanese meaning (日本語の意味、複数可、頻出順に)
         2. English definition (英語の定義、複数可、頻出順に)
+           CRITICAL: Each English definition MUST start with the part of speech in square brackets.
+           Format: "[part of speech] definition"
+           Examples: 
+           - "[verb] to organize and carry out"
+           - "[noun] a piece of furniture" 
+           - "[adjective] having great size"
         3. IPA pronunciation
         4. Common idioms or phrases with Japanese translations (if any, otherwise write "N/A")
            Format as an array of objects with "english" and "japanese" keys
         5. Example sentences (at least one, if possible 2-3, otherwise write "N/A")
 
         Format the response as JSON with these exact keys:
-        - japanese_meaning
-        - english_meaning
-        - ipa
+        - japanese_meaning (array of strings)
+        - english_meaning (array of strings, EACH MUST START WITH [part of speech])
+        - ipa (string)
         - idiom (array of objects with "english" and "japanese" keys, or "N/A" if none)
-        - example_sentence
+        - example_sentence (array of strings)
+        
+        Remember: Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.
         """
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4.1-mini",
+                model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a helpful language teacher providing vocabulary information in JSON format."},
+                    {"role": "system", "content": "You are a helpful language teacher providing vocabulary information in JSON format. Always include parts of speech in square brackets [noun], [verb], [adjective], etc. at the beginning of each English definition."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
@@ -138,20 +146,50 @@ class VocabularyFetcher:
             )
 
             content = response.choices[0].message.content
-            return json.loads(content)
+            data = json.loads(content)
+            
+            # Ensure english_meaning entries have parts of speech
+            if 'english_meaning' in data and isinstance(data['english_meaning'], list):
+                processed_meanings = []
+                for meaning in data['english_meaning']:
+                    # Check if it already has a part of speech tag
+                    if not meaning.startswith('['):
+                        # Try to infer part of speech from the definition
+                        meaning_lower = meaning.lower()
+                        if meaning_lower.startswith(('to ', 'to be ')):
+                            processed_meanings.append(f"[verb] {meaning}")
+                        elif meaning_lower.startswith(('a ', 'an ', 'the ')):
+                            processed_meanings.append(f"[noun] {meaning}")
+                        elif any(meaning_lower.startswith(w) for w in ['having ', 'being ', 'showing ', 'causing ', 'pleasing ', 'making ']):
+                            processed_meanings.append(f"[adjective] {meaning}")
+                        elif any(w in meaning_lower for w in [' act of ', ' process of ', ' state of ', ' quality of ']):
+                            processed_meanings.append(f"[noun] {meaning}")
+                        elif 'ly' in meaning_lower.split()[-1] if meaning_lower.split() else False:
+                            processed_meanings.append(f"[adverb] {meaning}")
+                        else:
+                            # For single word, it's often an adjective
+                            if len(meaning.split()) <= 5 and not any(c in meaning for c in '.,:;'):
+                                processed_meanings.append(f"[adjective] {meaning}")
+                            else:
+                                processed_meanings.append(f"[definition] {meaning}")
+                    else:
+                        processed_meanings.append(meaning)
+                data['english_meaning'] = processed_meanings
+            
+            return data
         except Exception as e:
             raise Exception(f"Error fetching word information from OpenAI: {e}")
 
-    def generate_audio(self, text: str, voice: str = "Joanna", speed: float = 1.0) -> bytes:
+    def generate_audio(self, text: str, voice: str = "Matthew", speed: float = 1.0) -> bytes:
         """Generate audio using Amazon Polly TTS API"""
         try:
             # Map speed to Polly's rate parameter (percentage)
             # OpenAI: 0.25-4.0, Polly: 20%-200%
             polly_rate = int(speed * 100)
-            
+
             # Wrap text in SSML for speed control
             ssml_text = f'<speak><prosody rate="{polly_rate}%">{text}</prosody></speak>'
-            
+
             response = self.polly_client.synthesize_speech(
                 Text=ssml_text,
                 TextType='ssml',
@@ -159,14 +197,14 @@ class VocabularyFetcher:
                 VoiceId=voice,
                 Engine='neural'  # Use neural engine for better quality
             )
-            
+
             # Read the audio stream
             audio_stream = response['AudioStream']
             return audio_stream.read()
         except Exception as e:
             raise Exception(f"Error generating audio with Polly: {e}")
 
-    def generate_audio_files(self, word: str, example_sentences, voice: str = "Joanna") -> Tuple[str, list]:
+    def generate_audio_files(self, word: str, example_sentences, voice: str = "Matthew") -> Tuple[str, list]:
         """Generate audio files for word and example sentences, return word audio and list of example audios"""
         try:
             # Generate audio for the word (slower speed for clarity)
@@ -246,7 +284,7 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
         word_audio_file = next((af for af in audio_files if af['filename'].startswith(f'word_{safe_word}')), None)
         if word_audio_file:
             word_audio_tag = f" [sound:{word_audio_file['filename']}]"
-    
+
     front = f"""
     <div style="font-size: 24px; font-weight: bold;">{word}{word_audio_tag}</div>
     <div style="font-size: 18px; color: #666;">{word_info.get('ipa', '')}</div>
@@ -268,14 +306,14 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
 
     # Handle both string and list for example_sentence in HTML
     example_content = word_info.get('example_sentence', '')
-    
+
     # Find example audio files
     example_audio_files = []
     if audio_files:
         example_audio_files = [af for af in audio_files if af['filename'].startswith(f'example_{safe_word}_')]
         # Sort by filename to maintain order
         example_audio_files.sort(key=lambda x: x['filename'])
-    
+
     if isinstance(example_content, list):
         example_items = []
         for i, example in enumerate(example_content):
@@ -371,20 +409,249 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
     return fields
 
 
+def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str, voice: str, no_audio: bool):
+    """Interactive session for continuous word processing"""
+    
+    try:
+        anki = AnkiConnector(config["anki_host"], config["anki_port"])
+        
+        # Check if model exists
+        available_models = anki.get_model_names()
+        if model_name not in available_models:
+            print(f"Error: Note type '{model_name}' not found in Anki.")
+            print(f"\nAvailable note types:")
+            for model in available_models:
+                print(f"  - {model}")
+            return
+        
+        # Get field names for the model
+        field_names = anki.get_model_field_names(model_name)
+        print(f"✓ Connected to Anki")
+        print(f"✓ Using deck: '{deck_name}'")
+        print(f"✓ Using model: '{model_name}' with fields: {', '.join(field_names)}")
+        print(f"✓ Voice: '{voice}'")
+        print(f"✓ Audio: {'Disabled' if no_audio else 'Enabled'}")
+        
+        if not config.get("openai_api_key"):
+            print("Error: OpenAI API key not found. Please set OPENAI_API_KEY environment variable or add it to config.")
+            return
+        
+        fetcher = VocabularyFetcher(config["openai_api_key"])
+        
+        print("\n" + "="*50)
+        print("Interactive Mode - Anki AI Vocabulary Builder")
+        print("="*50)
+        print("Commands:")
+        print("  add <word>     - Add a word to your deck")
+        print("  delete <word>  - Delete cards containing the word")
+        print("  help           - Show this help message")
+        print("  quit           - Exit interactive mode")
+        print("="*50)
+        
+        while True:
+            try:
+                user_input = input("\n> ").strip()
+                
+                if not user_input:
+                    continue
+                
+                parts = user_input.split(None, 1)
+                command = parts[0].lower()
+                
+                if command == "quit" or command == "exit":
+                    print("Goodbye!")
+                    break
+                
+                elif command == "help":
+                    print("\nCommands:")
+                    print("  add <word>     - Add a word to your deck")
+                    print("  delete <word>  - Delete cards containing the word")
+                    print("  help           - Show this help message")
+                    print("  quit           - Exit interactive mode")
+                
+                elif command == "add":
+                    if len(parts) < 2:
+                        print("Usage: add <word>")
+                        continue
+                    
+                    word = parts[1].strip()
+                    print(f"\nFetching information for '{word}'...")
+                    
+                    try:
+                        word_info = fetcher.get_word_info(word)
+                        
+                        print("Word information retrieved:")
+                        
+                        # Handle Japanese meanings display
+                        japanese_display = word_info.get('japanese_meaning', 'N/A')
+                        if isinstance(japanese_display, list):
+                            print(f"  Japanese:")
+                            for i, meaning in enumerate(japanese_display, 1):
+                                print(f"    {i}. {meaning}")
+                        else:
+                            print(f"  Japanese: {japanese_display}")
+                        
+                        # Handle English meanings display
+                        english_display = word_info.get('english_meaning', 'N/A')
+                        if isinstance(english_display, list):
+                            print(f"  English:")
+                            for i, meaning in enumerate(english_display, 1):
+                                print(f"    {i}. {meaning}")
+                        else:
+                            print(f"  English: {english_display}")
+                        
+                        print(f"  IPA: {word_info.get('ipa', 'N/A')}")
+                        
+                        # Handle idioms display
+                        idiom_display = word_info.get('idiom', 'N/A')
+                        if isinstance(idiom_display, list) and idiom_display != 'N/A':
+                            print(f"  Idiom:")
+                            for i, idiom in enumerate(idiom_display, 1):
+                                if isinstance(idiom, dict) and 'english' in idiom and 'japanese' in idiom:
+                                    print(f"    {i}. {idiom['english']} - {idiom['japanese']}")
+                                else:
+                                    print(f"    {i}. {idiom}")
+                        else:
+                            print(f"  Idiom: {idiom_display}")
+                        
+                        # Handle both string and list for example_sentence display
+                        example_display = word_info.get('example_sentence', 'N/A')
+                        if isinstance(example_display, list):
+                            print(f"  Example:")
+                            for i, example in enumerate(example_display, 1):
+                                print(f"    {i}. {example}")
+                        else:
+                            print(f"  Example: {example_display}")
+                        
+                        # Generate audio automatically (unless disabled)
+                        audio_files = None
+                        audio_generated = False
+                        if not no_audio:
+                            print(f"Generating audio with voice '{voice}'...")
+                            try:
+                                word_audio_b64, example_audio_list = fetcher.generate_audio_files(
+                                    word,
+                                    word_info.get('example_sentence', ''),
+                                    voice=voice
+                                )
+                                
+                                # Create safe filename (same as in create_anki_fields)
+                                safe_word = word.replace(' ', '_').replace('/', '_').replace('\\', '_')
+                                
+                                # Create audio files list
+                                audio_files = [
+                                    {
+                                        "filename": f"word_{safe_word}.mp3",
+                                        "data": word_audio_b64,
+                                        "fields": [field_names[0]] if field_names else []  # Only front field
+                                    }
+                                ]
+                                
+                                # Add separate audio file for each example sentence
+                                for example_audio in example_audio_list:
+                                    audio_files.append({
+                                        "filename": f"example_{safe_word}_{example_audio['index'] + 1}.mp3",
+                                        "data": example_audio['audio'],
+                                        "fields": [field_names[1]] if len(field_names) > 1 else field_names  # Only back field
+                                    })
+                                
+                                audio_generated = True
+                                total_files = 1 + len(example_audio_list)
+                                print(f"✓ Audio files generated successfully ({total_files} files: 1 word + {len(example_audio_list)} examples)")
+                            except Exception as e:
+                                print(f"Warning: Failed to generate audio: {e}")
+                                print("Continuing without audio...")
+                        
+                        print("Adding to Anki...")
+                        
+                        fields = create_anki_fields(word, word_info, field_names, audio_files)
+                        
+                        # Debug: Show field contents
+                        for field_name, field_content in fields.items():
+                            if "[sound:" in field_content:
+                                print(f"  Field '{field_name}' contains audio tags")
+                        
+                        note_id = anki.add_note(deck_name, model_name, fields, tags=["english", "vocabulary", "ai-generated"], audio=audio_files)
+                        
+                        if audio_generated and audio_files:
+                            print(f"✓ Successfully added '{word}' with audio to deck '{deck_name}' (Note ID: {note_id})")
+                        else:
+                            print(f"✓ Successfully added '{word}' to deck '{deck_name}' (Note ID: {note_id})")
+                    
+                    except Exception as e:
+                        print(f"Error processing '{word}': {e}")
+                
+                elif command == "delete":
+                    if len(parts) < 2:
+                        print("Usage: delete <word>")
+                        continue
+                    
+                    word = parts[1].strip()
+                    print(f"Searching for cards containing '{word}'...")
+                    
+                    try:
+                        # Build search query - search in all fields and deck
+                        query = f'"{word}" deck:"{deck_name}"'
+                        note_ids = anki.find_notes(query)
+                        
+                        if not note_ids:
+                            print(f"No cards found containing '{word}' in deck '{deck_name}'")
+                            continue
+                        
+                        # Get note information to show what will be deleted
+                        notes_info = anki.notes_info(note_ids)
+                        print(f"\nFound {len(note_ids)} card(s) to delete:")
+                        
+                        for note in notes_info:
+                            # Extract word from fields (try to get the front field)
+                            fields = note.get('fields', {})
+                            display_text = None
+                            for field_name, field_data in fields.items():
+                                if field_data and field_data.get('value'):
+                                    display_text = field_data['value'][:50] + "..." if len(field_data['value']) > 50 else field_data['value']
+                                    break
+                            print(f"  - Note ID {note['noteId']}: {display_text if display_text else 'Unknown content'}")
+                        
+                        # Confirm deletion
+                        confirm = input(f"\nDelete {len(note_ids)} card(s)? (y/N): ")
+                        if confirm.lower() == 'y':
+                            anki.delete_notes(note_ids)
+                            print(f"✓ Successfully deleted {len(note_ids)} card(s)")
+                        else:
+                            print("Deletion cancelled")
+                    
+                    except Exception as e:
+                        print(f"Error deleting '{word}': {e}")
+                
+                else:
+                    print(f"Unknown command: {command}")
+                    print("Type 'help' for available commands")
+            
+            except KeyboardInterrupt:
+                print("\nUse 'quit' to exit or continue with another command")
+            except EOFError:
+                print("\nGoodbye!")
+                break
+    
+    except Exception as e:
+        print(f"Error in interactive session: {e}")
+
+
 def main():
     # Load environment variables from .env file
     load_dotenv()
-    
+
     parser = argparse.ArgumentParser(
         description="Add English vocabulary to Anki deck with AI-generated definitions or delete existing cards"
     )
-    parser.add_argument("word", help="The English word to add or delete")
+    parser.add_argument("word", nargs="?", help="The English word to add or delete (not required in interactive mode)")
     parser.add_argument("--deck", help="Anki deck name (overrides config)")
     parser.add_argument("--model", help="Anki note model name (overrides config)")
     parser.add_argument("--no-audio", action="store_true", help="Disable automatic audio generation")
-    parser.add_argument("--voice", help="Amazon Polly voice (Joanna, Matthew, Amy, Brian, Mizuki, Takumi, etc.)", default="Joanna")
+    parser.add_argument("--voice", help="Amazon Polly voice (Joanna, Matthew, Amy, Brian, Mizuki, Takumi, etc.)", default="Matthew")
     parser.add_argument("--delete", action="store_true", help="Delete cards containing the word instead of adding")
     parser.add_argument("--config", action="store_true", help="Show configuration path")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Enter interactive mode for continuous word processing")
 
     args = parser.parse_args()
 
@@ -397,6 +664,15 @@ def main():
 
     deck_name = args.deck or config["deck_name"]
     model_name = args.model or config["model_name"]
+
+    # Handle interactive mode
+    if args.interactive:
+        interactive_session(config, deck_name, model_name, args.voice, args.no_audio)
+        return
+
+    # Check if word is provided for non-interactive mode
+    if not args.word:
+        parser.error("the following arguments are required: word (unless using --interactive mode)")
 
     try:
         anki = AnkiConnector(config["anki_host"], config["anki_port"])

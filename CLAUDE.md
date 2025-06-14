@@ -17,6 +17,22 @@ docker compose run --rm anki-vocab "word" --deck "Custom Deck"
 docker compose run --rm anki-vocab "word" --delete
 ```
 
+**Interactive Mode:**
+```bash
+# Start interactive session with default settings
+docker compose run --rm anki-vocab --interactive
+
+# Start with custom settings
+docker compose run --rm anki-vocab --interactive --deck "Advanced English" --voice "Joanna" --no-audio
+
+# Interactive commands:
+> add sophisticated
+> add magnificent
+> delete simple
+> help
+> quit
+```
+
 **Testing:**
 ```bash
 python test_polly.py     # Test AWS Polly integration
@@ -50,7 +66,7 @@ python debug_env.py      # Check environment configuration
 **Audio Generation:**
 - Word audio: Prosody with slow rate for clarity
 - Sentence audio: Natural speech rate
-- Voices: Joanna (default), Matthew, Amy, Brian, Mizuki (Japanese), Takumi (Japanese)
+- Voices: Matthew (default), Joanna, Amy, Brian, Mizuki (Japanese), Takumi (Japanese)
 
 **Card Format:**
 - Front: Word + IPA + word audio
