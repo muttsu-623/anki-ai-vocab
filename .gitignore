@@ -48,3 +48,8 @@ config.json
 
 # Docker
 .docker/
+
+# Test files
+test_polly.py
+test_output.mp3
+*.mp3

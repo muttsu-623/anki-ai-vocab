@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from openai import OpenAI
+import boto3
+from dotenv import load_dotenv
 
 
 class AnkiConnector:
@@ -98,6 +100,13 @@ class AnkiConnector:
 class VocabularyFetcher:
     def __init__(self, api_key: str):
         self.client = OpenAI(api_key=api_key)
+        # Initialize AWS Polly client
+        self.polly_client = boto3.client(
+            'polly',
+            region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'),
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+        )
 
     def get_word_info(self, word: str) -> Dict[str, str]:
         prompt = f"""
@@ -105,14 +114,15 @@ class VocabularyFetcher:
         1. Japanese meaning (日本語の意味、複数可、頻出順に)
         2. English definition (英語の定義、複数可、頻出順に)
         3. IPA pronunciation
-        4. Common idioms or phrases (if any, otherwise write "N/A")
+        4. Common idioms or phrases with Japanese translations (if any, otherwise write "N/A")
+           Format as an array of objects with "english" and "japanese" keys
         5. Example sentences (at least one, if possible 2-3, otherwise write "N/A")
 
         Format the response as JSON with these exact keys:
         - japanese_meaning
         - english_meaning
         - ipa
-        - idiom
+        - idiom (array of objects with "english" and "japanese" keys, or "N/A" if none)
         - example_sentence
         """
 
@@ -132,20 +142,31 @@ class VocabularyFetcher:
         except Exception as e:
             raise Exception(f"Error fetching word information from OpenAI: {e}")
 
-    def generate_audio(self, text: str, voice: str = "alloy", speed: float = 1.0) -> bytes:
-        """Generate audio using OpenAI TTS API"""
+    def generate_audio(self, text: str, voice: str = "Joanna", speed: float = 1.0) -> bytes:
+        """Generate audio using Amazon Polly TTS API"""
         try:
-            response = self.client.audio.speech.create(
-                model="tts-1",
-                voice=voice,
-                input=text,
-                speed=speed
+            # Map speed to Polly's rate parameter (percentage)
+            # OpenAI: 0.25-4.0, Polly: 20%-200%
+            polly_rate = int(speed * 100)
+            
+            # Wrap text in SSML for speed control
+            ssml_text = f'<speak><prosody rate="{polly_rate}%">{text}</prosody></speak>'
+            
+            response = self.polly_client.synthesize_speech(
+                Text=ssml_text,
+                TextType='ssml',
+                OutputFormat='mp3',
+                VoiceId=voice,
+                Engine='neural'  # Use neural engine for better quality
             )
-            return response.read()
+            
+            # Read the audio stream
+            audio_stream = response['AudioStream']
+            return audio_stream.read()
         except Exception as e:
-            raise Exception(f"Error generating audio: {e}")
+            raise Exception(f"Error generating audio with Polly: {e}")
 
-    def generate_audio_files(self, word: str, example_sentences, voice: str = "alloy") -> Tuple[str, list]:
+    def generate_audio_files(self, word: str, example_sentences, voice: str = "Joanna") -> Tuple[str, list]:
         """Generate audio files for word and example sentences, return word audio and list of example audios"""
         try:
             # Generate audio for the word (slower speed for clarity)
@@ -302,7 +323,13 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
     if word_info.get('idiom') and word_info['idiom'] != 'N/A':
         idiom_content = word_info['idiom']
         if isinstance(idiom_content, list):
-            idiom_html = '<ul style="margin: 5px 0; padding-left: 20px;">' + ''.join([f"<li>{idiom}</li>" for idiom in idiom_content]) + '</ul>'
+            idiom_items = []
+            for idiom in idiom_content:
+                if isinstance(idiom, dict) and 'english' in idiom and 'japanese' in idiom:
+                    idiom_items.append(f"<li>{idiom['english']}<br><span style='color: #666; margin-left: 20px;'>→ {idiom['japanese']}</span></li>")
+                else:
+                    idiom_items.append(f"<li>{idiom}</li>")
+            idiom_html = '<ul style="margin: 5px 0; padding-left: 20px;">' + ''.join(idiom_items) + '</ul>'
         else:
             idiom_html = idiom_content
 
@@ -345,6 +372,9 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
 
 
 def main():
+    # Load environment variables from .env file
+    load_dotenv()
+    
     parser = argparse.ArgumentParser(
         description="Add English vocabulary to Anki deck with AI-generated definitions or delete existing cards"
     )
@@ -352,7 +382,7 @@ def main():
     parser.add_argument("--deck", help="Anki deck name (overrides config)")
     parser.add_argument("--model", help="Anki note model name (overrides config)")
     parser.add_argument("--no-audio", action="store_true", help="Disable automatic audio generation")
-    parser.add_argument("--voice", help="OpenAI TTS voice (alloy, echo, fable, onyx, nova, shimmer)", default="alloy")
+    parser.add_argument("--voice", help="Amazon Polly voice (Joanna, Matthew, Amy, Brian, Mizuki, Takumi, etc.)", default="Joanna")
     parser.add_argument("--delete", action="store_true", help="Delete cards containing the word instead of adding")
     parser.add_argument("--config", action="store_true", help="Show configuration path")
 
@@ -456,10 +486,13 @@ def main():
 
         # Handle idioms display
         idiom_display = word_info.get('idiom', 'N/A')
-        if isinstance(idiom_display, list):
+        if isinstance(idiom_display, list) and idiom_display != 'N/A':
             print(f"  Idiom:")
             for i, idiom in enumerate(idiom_display, 1):
-                print(f"    {i}. {idiom}")
+                if isinstance(idiom, dict) and 'english' in idiom and 'japanese' in idiom:
+                    print(f"    {i}. {idiom['english']} - {idiom['japanese']}")
+                else:
+                    print(f"    {i}. {idiom}")
         else:
             print(f"  Idiom: {idiom_display}")
 
