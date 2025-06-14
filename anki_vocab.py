@@ -115,14 +115,19 @@ class VocabularyFetcher:
         2. English definition (英語の定義、複数可、頻出順に)
            CRITICAL: Each English definition MUST start with the part of speech in square brackets.
            Format: "[part of speech] definition"
-           Examples: 
+           Examples:
            - "[verb] to organize and carry out"
-           - "[noun] a piece of furniture" 
+           - "[noun] a piece of furniture"
            - "[adjective] having great size"
         3. IPA pronunciation
         4. Common idioms or phrases with Japanese translations (if any, otherwise write "N/A")
            Format as an array of objects with "english" and "japanese" keys
         5. Example sentences (at least one, if possible 2-3, otherwise write "N/A")
+        6. Similar words and their differences (類似語とその違い)
+           Provide 2-3 words that are similar in meaning but have nuanced differences.
+           Format as an array of objects with "word", "difference" (in English), and "difference_japanese" keys.
+           Example: [{"word": "big", "difference": "more general term for large size", "difference_japanese": "サイズが大きいことを表す一般的な言葉"}]
+           If no similar words exist, write "N/A"
 
         Format the response as JSON with these exact keys:
         - japanese_meaning (array of strings)
@@ -130,7 +135,8 @@ class VocabularyFetcher:
         - ipa (string)
         - idiom (array of objects with "english" and "japanese" keys, or "N/A" if none)
         - example_sentence (array of strings)
-        
+        - similar_words (array of objects with "word", "difference", and "difference_japanese" keys, or "N/A" if none)
+
         Remember: Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.
         """
 
@@ -147,7 +153,7 @@ class VocabularyFetcher:
 
             content = response.choices[0].message.content
             data = json.loads(content)
-            
+
             # Ensure english_meaning entries have parts of speech
             if 'english_meaning' in data and isinstance(data['english_meaning'], list):
                 processed_meanings = []
@@ -175,7 +181,7 @@ class VocabularyFetcher:
                     else:
                         processed_meanings.append(meaning)
                 data['english_meaning'] = processed_meanings
-            
+
             return data
         except Exception as e:
             raise Exception(f"Error fetching word information from OpenAI: {e}")
@@ -377,6 +383,32 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
         </div>
         """
 
+    # Handle similar words (list or string)
+    if word_info.get('similar_words') and word_info['similar_words'] != 'N/A':
+        similar_content = word_info['similar_words']
+        if isinstance(similar_content, list):
+            similar_items = []
+            for similar in similar_content:
+                if isinstance(similar, dict) and 'word' in similar:
+                    similar_word = similar['word']
+                    difference = similar.get('difference', '')
+                    difference_jp = similar.get('difference_japanese', '')
+                    similar_items.append(
+                        f"<li><strong>{similar_word}</strong>: {difference}<br>"
+                        f"<span style='color: #666; margin-left: 20px;'>→ {difference_jp}</span></li>"
+                    )
+                else:
+                    similar_items.append(f"<li>{similar}</li>")
+            similar_html = '<ul style="margin: 5px 0; padding-left: 20px;">' + ''.join(similar_items) + '</ul>'
+        else:
+            similar_html = similar_content
+
+        back += f"""
+        <div style="margin-bottom: 15px; margin-top: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 5px; border: 1px solid #e0e0e0;">
+            <strong>Similar Words & Differences:</strong> {similar_html}
+        </div>
+        """
+
     # Map to actual field names
     fields = {}
 
@@ -411,10 +443,10 @@ def create_anki_fields(word: str, word_info: Dict[str, str], field_names: list, 
 
 def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str, voice: str, no_audio: bool):
     """Interactive session for continuous word processing"""
-    
+
     try:
         anki = AnkiConnector(config["anki_host"], config["anki_port"])
-        
+
         # Check if model exists
         available_models = anki.get_model_names()
         if model_name not in available_models:
@@ -423,7 +455,7 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
             for model in available_models:
                 print(f"  - {model}")
             return
-        
+
         # Get field names for the model
         field_names = anki.get_model_field_names(model_name)
         print(f"✓ Connected to Anki")
@@ -431,13 +463,13 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
         print(f"✓ Using model: '{model_name}' with fields: {', '.join(field_names)}")
         print(f"✓ Voice: '{voice}'")
         print(f"✓ Audio: {'Disabled' if no_audio else 'Enabled'}")
-        
+
         if not config.get("openai_api_key"):
             print("Error: OpenAI API key not found. Please set OPENAI_API_KEY environment variable or add it to config.")
             return
-        
+
         fetcher = VocabularyFetcher(config["openai_api_key"])
-        
+
         print("\n" + "="*50)
         print("Interactive Mode - Anki AI Vocabulary Builder")
         print("="*50)
@@ -447,41 +479,41 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
         print("  help           - Show this help message")
         print("  quit           - Exit interactive mode")
         print("="*50)
-        
+
         while True:
             try:
                 user_input = input("\n> ").strip()
-                
+
                 if not user_input:
                     continue
-                
+
                 parts = user_input.split(None, 1)
                 command = parts[0].lower()
-                
+
                 if command == "quit" or command == "exit":
                     print("Goodbye!")
                     break
-                
+
                 elif command == "help":
                     print("\nCommands:")
                     print("  add <word>     - Add a word to your deck")
                     print("  delete <word>  - Delete cards containing the word")
                     print("  help           - Show this help message")
                     print("  quit           - Exit interactive mode")
-                
+
                 elif command == "add":
                     if len(parts) < 2:
                         print("Usage: add <word>")
                         continue
-                    
+
                     word = parts[1].strip()
                     print(f"\nFetching information for '{word}'...")
-                    
+
                     try:
                         word_info = fetcher.get_word_info(word)
-                        
+
                         print("Word information retrieved:")
-                        
+
                         # Handle Japanese meanings display
                         japanese_display = word_info.get('japanese_meaning', 'N/A')
                         if isinstance(japanese_display, list):
@@ -490,7 +522,7 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                 print(f"    {i}. {meaning}")
                         else:
                             print(f"  Japanese: {japanese_display}")
-                        
+
                         # Handle English meanings display
                         english_display = word_info.get('english_meaning', 'N/A')
                         if isinstance(english_display, list):
@@ -499,9 +531,9 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                 print(f"    {i}. {meaning}")
                         else:
                             print(f"  English: {english_display}")
-                        
+
                         print(f"  IPA: {word_info.get('ipa', 'N/A')}")
-                        
+
                         # Handle idioms display
                         idiom_display = word_info.get('idiom', 'N/A')
                         if isinstance(idiom_display, list) and idiom_display != 'N/A':
@@ -513,7 +545,7 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                     print(f"    {i}. {idiom}")
                         else:
                             print(f"  Idiom: {idiom_display}")
-                        
+
                         # Handle both string and list for example_sentence display
                         example_display = word_info.get('example_sentence', 'N/A')
                         if isinstance(example_display, list):
@@ -522,7 +554,21 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                 print(f"    {i}. {example}")
                         else:
                             print(f"  Example: {example_display}")
-                        
+
+                        # Handle similar words display
+                        similar_display = word_info.get('similar_words', 'N/A')
+                        if isinstance(similar_display, list) and similar_display != 'N/A':
+                            print(f"  Similar Words:")
+                            for i, similar in enumerate(similar_display, 1):
+                                if isinstance(similar, dict) and 'word' in similar:
+                                    print(f"    {i}. {similar['word']}: {similar.get('difference', '')}")
+                                    if similar.get('difference_japanese'):
+                                        print(f"       → {similar['difference_japanese']}")
+                                else:
+                                    print(f"    {i}. {similar}")
+                        elif similar_display != 'N/A':
+                            print(f"  Similar Words: {similar_display}")
+
                         # Generate audio automatically (unless disabled)
                         audio_files = None
                         audio_generated = False
@@ -534,10 +580,10 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                     word_info.get('example_sentence', ''),
                                     voice=voice
                                 )
-                                
+
                                 # Create safe filename (same as in create_anki_fields)
                                 safe_word = word.replace(' ', '_').replace('/', '_').replace('\\', '_')
-                                
+
                                 # Create audio files list
                                 audio_files = [
                                     {
@@ -546,7 +592,7 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                         "fields": [field_names[0]] if field_names else []  # Only front field
                                     }
                                 ]
-                                
+
                                 # Add separate audio file for each example sentence
                                 for example_audio in example_audio_list:
                                     audio_files.append({
@@ -554,54 +600,54 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                         "data": example_audio['audio'],
                                         "fields": [field_names[1]] if len(field_names) > 1 else field_names  # Only back field
                                     })
-                                
+
                                 audio_generated = True
                                 total_files = 1 + len(example_audio_list)
                                 print(f"✓ Audio files generated successfully ({total_files} files: 1 word + {len(example_audio_list)} examples)")
                             except Exception as e:
                                 print(f"Warning: Failed to generate audio: {e}")
                                 print("Continuing without audio...")
-                        
+
                         print("Adding to Anki...")
-                        
+
                         fields = create_anki_fields(word, word_info, field_names, audio_files)
-                        
+
                         # Debug: Show field contents
                         for field_name, field_content in fields.items():
                             if "[sound:" in field_content:
                                 print(f"  Field '{field_name}' contains audio tags")
-                        
+
                         note_id = anki.add_note(deck_name, model_name, fields, tags=["english", "vocabulary", "ai-generated"], audio=audio_files)
-                        
+
                         if audio_generated and audio_files:
                             print(f"✓ Successfully added '{word}' with audio to deck '{deck_name}' (Note ID: {note_id})")
                         else:
                             print(f"✓ Successfully added '{word}' to deck '{deck_name}' (Note ID: {note_id})")
-                    
+
                     except Exception as e:
                         print(f"Error processing '{word}': {e}")
-                
+
                 elif command == "delete":
                     if len(parts) < 2:
                         print("Usage: delete <word>")
                         continue
-                    
+
                     word = parts[1].strip()
                     print(f"Searching for cards containing '{word}'...")
-                    
+
                     try:
                         # Build search query - search in all fields and deck
                         query = f'"{word}" deck:"{deck_name}"'
                         note_ids = anki.find_notes(query)
-                        
+
                         if not note_ids:
                             print(f"No cards found containing '{word}' in deck '{deck_name}'")
                             continue
-                        
+
                         # Get note information to show what will be deleted
                         notes_info = anki.notes_info(note_ids)
                         print(f"\nFound {len(note_ids)} card(s) to delete:")
-                        
+
                         for note in notes_info:
                             # Extract word from fields (try to get the front field)
                             fields = note.get('fields', {})
@@ -611,7 +657,7 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                                     display_text = field_data['value'][:50] + "..." if len(field_data['value']) > 50 else field_data['value']
                                     break
                             print(f"  - Note ID {note['noteId']}: {display_text if display_text else 'Unknown content'}")
-                        
+
                         # Confirm deletion
                         confirm = input(f"\nDelete {len(note_ids)} card(s)? (y/N): ")
                         if confirm.lower() == 'y':
@@ -619,20 +665,20 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
                             print(f"✓ Successfully deleted {len(note_ids)} card(s)")
                         else:
                             print("Deletion cancelled")
-                    
+
                     except Exception as e:
                         print(f"Error deleting '{word}': {e}")
-                
+
                 else:
                     print(f"Unknown command: {command}")
                     print("Type 'help' for available commands")
-            
+
             except KeyboardInterrupt:
                 print("\nUse 'quit' to exit or continue with another command")
             except EOFError:
                 print("\nGoodbye!")
                 break
-    
+
     except Exception as e:
         print(f"Error in interactive session: {e}")
 
@@ -780,6 +826,20 @@ def main():
                 print(f"    {i}. {example}")
         else:
             print(f"  Example: {example_display}")
+
+        # Handle similar words display
+        similar_display = word_info.get('similar_words', 'N/A')
+        if isinstance(similar_display, list) and similar_display != 'N/A':
+            print(f"  Similar Words:")
+            for i, similar in enumerate(similar_display, 1):
+                if isinstance(similar, dict) and 'word' in similar:
+                    print(f"    {i}. {similar['word']}: {similar.get('difference', '')}")
+                    if similar.get('difference_japanese'):
+                        print(f"       → {similar['difference_japanese']}")
+                else:
+                    print(f"    {i}. {similar}")
+        elif similar_display != 'N/A':
+            print(f"  Similar Words: {similar_display}")
 
         # Generate audio automatically (unless disabled)
         audio_files = None
