@@ -2,6 +2,9 @@
 
 A Dockerized command-line tool that automatically adds English vocabulary to your Anki deck with AI-generated definitions, pronunciation, and examples.
 
+> **🚀 New TypeScript Version Available!** 
+> This project is now available in both Python and TypeScript versions. See the [TypeScript Version](#typescript-version) section for details.
+
 ## Features
 
 - Fetches word information using OpenAI's GPT model:
@@ -207,9 +210,83 @@ To modify the tool:
 2. Rebuild the Docker image: `docker-compose build`
 3. Test your changes
 
+## TypeScript Version
+
+This project is now available in TypeScript with improved type safety and modern JavaScript features!
+
+### TypeScript Features
+
+- **Type Safety**: Full TypeScript type definitions for all APIs and data structures
+- **Modern JavaScript**: ES2022 features with async/await throughout
+- **Better Error Handling**: Structured error types with detailed error messages
+- **Improved Performance**: Optimized async operations and better memory management
+- **Enhanced Development Experience**: Better IDE support and autocomplete
+
+### Using the TypeScript Version
+
+The TypeScript version provides the same functionality as the Python version with improved reliability and developer experience.
+
+#### Build and Run TypeScript Version
+
+```bash
+# Build the TypeScript version
+docker-compose -f docker-compose.ts.yml build
+
+# Run with TypeScript version
+docker-compose -f docker-compose.ts.yml run --rm anki-vocab-ts "serendipity"
+
+# Interactive mode
+docker-compose -f docker-compose.ts.yml run --rm anki-vocab-ts --interactive
+```
+
+#### Development with TypeScript
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev "word"
+
+# Build for production
+npm run build
+
+# Run built version
+npm start "word"
+
+# Run tests
+npm test
+
+# Lint code
+npm run lint
+```
+
+#### Debug Scripts
+
+Test your environment setup:
+
+```bash
+# Check environment variables
+npm run dev src/debug/debugEnv.ts
+
+# Test AWS Polly integration
+npm run dev src/debug/testPolly.ts
+```
+
+### Choosing Between Versions
+
+- **Python Version**: Mature, stable, smaller Docker image
+- **TypeScript Version**: Type-safe, modern features, better development experience
+
+Both versions provide identical functionality and can be used interchangeably.
+
 ## Clean Up
 
-To remove the Docker image:
+To remove the Docker images:
 ```bash
+# Remove Python version
 docker rmi anki-ai-vocab:latest
+
+# Remove TypeScript version  
+docker rmi anki-ai-vocab-ts:latest
 ```

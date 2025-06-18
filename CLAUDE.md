@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Anki AI Vocabulary Builder is a Dockerized CLI tool that automates English vocabulary flashcard creation using OpenAI GPT-4-mini for content generation and AWS Polly for text-to-speech.
+Anki AI Vocabulary Builder is a Dockerized CLI tool that automates English vocabulary flashcard creation using OpenAI GPT-4-mini for content generation and AWS Polly for text-to-speech. Available in both Python and TypeScript versions.
 
 ## Common Commands
 
-**Build & Run:**
+**Python Version:**
 ```bash
 docker compose build
 docker compose run --rm anki-vocab "word"
@@ -17,15 +17,24 @@ docker compose run --rm anki-vocab "word" --deck "Custom Deck"
 docker compose run --rm anki-vocab "word" --delete
 ```
 
+**TypeScript Version:**
+```bash
+docker compose -f docker-compose.ts.yml build
+docker compose -f docker-compose.ts.yml run --rm anki-vocab-ts "word"
+docker compose -f docker-compose.ts.yml run --rm anki-vocab-ts "word" --no-audio
+docker compose -f docker-compose.ts.yml run --rm anki-vocab-ts "word" --deck "Custom Deck"
+docker compose -f docker-compose.ts.yml run --rm anki-vocab-ts "word" --delete
+```
+
 **Interactive Mode:**
 ```bash
-# Start interactive session with default settings
+# Python version
 docker compose run --rm anki-vocab --interactive
 
-# Start with custom settings
-docker compose run --rm anki-vocab --interactive --deck "Advanced English" --voice "Joanna" --no-audio
+# TypeScript version  
+docker compose -f docker-compose.ts.yml run --rm anki-vocab-ts --interactive
 
-# Interactive commands:
+# Interactive commands (both versions):
 > add sophisticated
 > add magnificent
 > delete simple
@@ -33,19 +42,44 @@ docker compose run --rm anki-vocab --interactive --deck "Advanced English" --voi
 > quit
 ```
 
+**Local Development (TypeScript):**
+```bash
+npm install              # Install dependencies
+npm run dev "word"       # Run in development mode
+npm run build           # Build TypeScript
+npm start "word"        # Run built version
+npm test               # Run tests
+npm run lint           # Lint code
+```
+
 **Testing:**
 ```bash
+# Python version
 python test_polly.py     # Test AWS Polly integration
 python debug_env.py      # Check environment configuration
+
+# TypeScript version
+npm run dev src/debug/testPolly.ts    # Test AWS Polly integration
+npm run dev src/debug/debugEnv.ts     # Check environment configuration
 ```
 
 ## Architecture
 
 **Main Components:**
+
+Python Version:
 - `anki_vocab.py`: Core application containing:
   - `AnkiConnector`: AnkiConnect API communication
   - `VocabularyFetcher`: OpenAI and AWS Polly integration
   - Card formatting and CLI orchestration
+
+TypeScript Version:
+- `src/index.ts`: Main CLI entry point
+- `src/lib/ankiConnector.ts`: AnkiConnect API communication
+- `src/lib/vocabularyFetcher.ts`: OpenAI and AWS Polly integration
+- `src/lib/cli.ts`: Interactive session management
+- `src/lib/utils.ts`: Utility functions and card formatting
+- `src/types/index.ts`: TypeScript type definitions
 
 **Configuration Priority:**
 1. Environment variables (`.env` file)

@@ -49,6 +49,21 @@ config.json
 # Docker
 .docker/
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
+dist/
+
+# Jest
+coverage/
+
 # Test files
 test_polly.py
 test_output.mp3

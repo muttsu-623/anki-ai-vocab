@@ -186,6 +186,89 @@ class VocabularyFetcher:
         except Exception as e:
             raise Exception(f"Error fetching word information from OpenAI: {e}")
 
+    def get_word_info_with_specific_meanings(self, word: str, japanese_meanings: list) -> Dict[str, str]:
+        """Get word information for specific Japanese meanings only"""
+        japanese_meanings_str = ", ".join(japanese_meanings)
+        
+        prompt = f"""
+        Please provide the following information for the English word "{word}" ONLY for these specific Japanese meanings: {japanese_meanings_str}
+
+        IMPORTANT CONSTRAINTS:
+        1. Japanese meaning: Use ONLY the provided meanings: {japanese_meanings_str}
+        2. English definition: Provide ONLY English definitions that correspond to the specified Japanese meanings
+           CRITICAL: Each English definition MUST start with the part of speech in square brackets.
+           Format: "[part of speech] definition"
+        3. IPA pronunciation (same as usual)
+        4. Idioms: Skip idioms completely (return "N/A")
+        5. Example sentences: Provide ONLY example sentences that use the word in the context of the specified Japanese meanings
+        6. Similar words: Provide ONLY words that are similar when used in the context of the specified Japanese meanings
+           Format as an array of objects with "word", "difference" (in English), and "difference_japanese" keys.
+
+        Format the response as JSON with these exact keys:
+        - japanese_meaning (array of strings - use ONLY the provided meanings)
+        - english_meaning (array of strings, EACH MUST START WITH [part of speech])
+        - ipa (string)
+        - idiom (always "N/A")
+        - example_sentence (array of strings - only for the specified meanings)
+        - similar_words (array of objects with "word", "difference", and "difference_japanese" keys, or "N/A" if none)
+
+        Remember: 
+        - Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.
+        - Only include content relevant to the specified Japanese meanings: {japanese_meanings_str}
+        """
+
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful language teacher providing vocabulary information in JSON format for specific meanings only. Always include parts of speech in square brackets [noun], [verb], [adjective], etc. at the beginning of each English definition. Only provide information relevant to the specified Japanese meanings."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                response_format={"type": "json_object"}
+            )
+
+            content = response.choices[0].message.content
+            data = json.loads(content)
+
+            # Ensure japanese_meaning uses only the specified meanings
+            data['japanese_meaning'] = japanese_meanings
+
+            # Ensure english_meaning entries have parts of speech
+            if 'english_meaning' in data and isinstance(data['english_meaning'], list):
+                processed_meanings = []
+                for meaning in data['english_meaning']:
+                    # Check if it already has a part of speech tag
+                    if not meaning.startswith('['):
+                        # Try to infer part of speech from the definition
+                        meaning_lower = meaning.lower()
+                        if meaning_lower.startswith(('to ', 'to be ')):
+                            processed_meanings.append(f"[verb] {meaning}")
+                        elif meaning_lower.startswith(('a ', 'an ', 'the ')):
+                            processed_meanings.append(f"[noun] {meaning}")
+                        elif any(meaning_lower.startswith(w) for w in ['having ', 'being ', 'showing ', 'causing ', 'pleasing ', 'making ']):
+                            processed_meanings.append(f"[adjective] {meaning}")
+                        elif any(w in meaning_lower for w in [' act of ', ' process of ', ' state of ', ' quality of ']):
+                            processed_meanings.append(f"[noun] {meaning}")
+                        elif 'ly' in meaning_lower.split()[-1] if meaning_lower.split() else False:
+                            processed_meanings.append(f"[adverb] {meaning}")
+                        else:
+                            # For single word, it's often an adjective
+                            if len(meaning.split()) <= 5 and not any(c in meaning for c in '.,:;'):
+                                processed_meanings.append(f"[adjective] {meaning}")
+                            else:
+                                processed_meanings.append(f"[definition] {meaning}")
+                    else:
+                        processed_meanings.append(meaning)
+                data['english_meaning'] = processed_meanings
+
+            # Ensure idiom is always "N/A"
+            data['idiom'] = "N/A"
+
+            return data
+        except Exception as e:
+            raise Exception(f"Error fetching word information with specific meanings from OpenAI: {e}")
+
     def generate_audio(self, text: str, voice: str = "Matthew", speed: float = 1.0) -> bytes:
         """Generate audio using Amazon Polly TTS API"""
         try:
@@ -246,6 +329,19 @@ class VocabularyFetcher:
             return word_audio_base64, example_audio_list
         except Exception as e:
             raise Exception(f"Error generating audio files: {e}")
+
+
+def parse_japanese_meanings(meanings_str: str) -> list:
+    """Parse comma-separated Japanese meanings string into a list"""
+    if not meanings_str or not meanings_str.strip():
+        return []
+    
+    # Split by comma and clean up each meaning
+    meanings = [meaning.strip() for meaning in meanings_str.split(',')]
+    # Remove empty strings
+    meanings = [meaning for meaning in meanings if meaning]
+    
+    return meanings
 
 
 def load_config() -> Dict[str, Any]:
@@ -474,10 +570,13 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
         print("Interactive Mode - Anki AI Vocabulary Builder")
         print("="*50)
         print("Commands:")
-        print("  add <word>     - Add a word to your deck")
-        print("  delete <word>  - Delete cards containing the word")
-        print("  help           - Show this help message")
-        print("  quit           - Exit interactive mode")
+        print("  add <word> [japanese-meanings]  - Add a word to your deck")
+        print("    Examples:")
+        print("      add sophisticated")
+        print("      add sophisticated 洗練された,上品な")
+        print("  delete <word>                   - Delete cards containing the word")
+        print("  help                            - Show this help message")
+        print("  quit                            - Exit interactive mode")
         print("="*50)
 
         while True:
@@ -496,21 +595,41 @@ def interactive_session(config: Dict[str, Any], deck_name: str, model_name: str,
 
                 elif command == "help":
                     print("\nCommands:")
-                    print("  add <word>     - Add a word to your deck")
-                    print("  delete <word>  - Delete cards containing the word")
-                    print("  help           - Show this help message")
-                    print("  quit           - Exit interactive mode")
+                    print("  add <word> [japanese-meanings]  - Add a word to your deck")
+                    print("    Examples:")
+                    print("      add sophisticated")
+                    print("      add sophisticated 洗練された,上品な")
+                    print("  delete <word>                   - Delete cards containing the word")
+                    print("  help                            - Show this help message")
+                    print("  quit                            - Exit interactive mode")
 
                 elif command == "add":
                     if len(parts) < 2:
-                        print("Usage: add <word>")
+                        print("Usage: add <word> [japanese-meanings]")
+                        print("  Example: add sophisticated")
+                        print("  Example: add sophisticated 洗練された,上品な")
                         continue
 
+                    # Parse command arguments
                     word = parts[1].strip()
-                    print(f"\nFetching information for '{word}'...")
+                    japanese_meanings = []
+                    
+                    # Check if Japanese meanings are provided as additional arguments
+                    if len(parts) >= 3:
+                        japanese_meanings_str = parts[2].strip()
+                        japanese_meanings = parse_japanese_meanings(japanese_meanings_str)
+                    
+                    if japanese_meanings:
+                        print(f"\nFetching information for '{word}' with specific Japanese meanings: {', '.join(japanese_meanings)}")
+                    else:
+                        print(f"\nFetching information for '{word}'...")
 
                     try:
-                        word_info = fetcher.get_word_info(word)
+                        # Use appropriate method based on whether Japanese meanings are provided
+                        if japanese_meanings:
+                            word_info = fetcher.get_word_info_with_specific_meanings(word, japanese_meanings)
+                        else:
+                            word_info = fetcher.get_word_info(word)
 
                         print("Word information retrieved:")
 
@@ -695,6 +814,7 @@ def main():
     parser.add_argument("--model", help="Anki note model name (overrides config)")
     parser.add_argument("--no-audio", action="store_true", help="Disable automatic audio generation")
     parser.add_argument("--voice", help="Amazon Polly voice (Joanna, Matthew, Amy, Brian, Mizuki, Takumi, etc.)", default="Matthew")
+    parser.add_argument("--japanese-meaning", help="Specific Japanese meaning(s) for the word (comma-separated for multiple meanings)")
     parser.add_argument("--delete", action="store_true", help="Delete cards containing the word instead of adding")
     parser.add_argument("--config", action="store_true", help="Show configuration path")
     parser.add_argument("--interactive", "-i", action="store_true", help="Enter interactive mode for continuous word processing")
@@ -782,7 +902,18 @@ def main():
         print(f"\nUsing note type '{model_name}' with fields: {', '.join(field_names)}")
 
         fetcher = VocabularyFetcher(config["openai_api_key"])
-        word_info = fetcher.get_word_info(args.word)
+        
+        # Check if specific Japanese meanings are provided
+        if args.japanese_meaning:
+            japanese_meanings = parse_japanese_meanings(args.japanese_meaning)
+            if japanese_meanings:
+                print(f"Using specific Japanese meanings: {', '.join(japanese_meanings)}")
+                word_info = fetcher.get_word_info_with_specific_meanings(args.word, japanese_meanings)
+            else:
+                print("Warning: Invalid Japanese meanings provided, using default behavior")
+                word_info = fetcher.get_word_info(args.word)
+        else:
+            word_info = fetcher.get_word_info(args.word)
 
         print("\nWord information retrieved:")
 
