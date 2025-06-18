@@ -25,9 +25,9 @@ RUN npm run build
 COPY entrypoint-ts.sh ./entrypoint.sh
 RUN chmod +x entrypoint.sh
 
-# Create non-root user
-RUN useradd -m -u 1000 vocabuser && chown -R vocabuser:vocabuser /app
-USER vocabuser
+# Create non-root user (allow existing UID)
+RUN useradd -m -u 1001 vocabuser 2>/dev/null || true && chown -R 1001:1001 /app
+USER 1001
 
 # Set environment variables
 ENV NODE_ENV=production

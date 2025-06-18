@@ -2,9 +2,6 @@
 
 A Dockerized command-line tool that automatically adds English vocabulary to your Anki deck with AI-generated definitions, pronunciation, and examples.
 
-> **🚀 New TypeScript Version Available!** 
-> This project is now available in both Python and TypeScript versions. See the [TypeScript Version](#typescript-version) section for details.
-
 ## Features
 
 - Fetches word information using OpenAI's GPT model:
@@ -13,6 +10,7 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
   - IPA pronunciation
   - Related idioms/phrases
   - Example sentences
+  - Similar words with differences
 - **Automatic audio generation** using Amazon Polly:
   - Word pronunciation with clear, slower speech
   - Example sentence pronunciation with natural speech
@@ -24,9 +22,11 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
   - Add new vocabulary cards with AI-generated content
   - Delete existing cards by word search
   - Automatic deck creation if needed
+- **Interactive mode** for continuous word processing
 - Automatically creates formatted Anki cards with audio playback
 - Works with AnkiConnect add-on
-- Fully containerized with Docker - no local Python installation needed
+- Fully containerized with Docker - no local installation needed
+- **Type-safe TypeScript implementation** with comprehensive error handling
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
 
 4. Build the Docker image:
    ```bash
-   docker-compose build
+   docker compose -f docker-compose.ts.yml build
    ```
 
 ## Usage
@@ -76,57 +76,92 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
 
 Add a word to your Anki deck (audio is generated automatically):
 ```bash
-docker-compose run --rm anki-vocab "serendipity"
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "serendipity"
 ```
 
-### Without Audio
+### Interactive Mode
 
-Disable automatic audio generation:
+Enter interactive mode for continuous word processing:
 ```bash
-docker-compose run --rm anki-vocab "serendipity" --no-audio
+docker compose -f docker-compose.ts.yml run --rm anki-vocab --interactive
 ```
 
-### With Custom Deck
+Interactive commands:
+```
+> add sophisticated
+> add sophisticated 洗練された,上品な
+> delete simple
+> help
+> quit
+```
 
+### Advanced Options
+
+**Without Audio:**
 ```bash
-docker-compose run --rm anki-vocab "eloquent" --deck "Advanced English"
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "serendipity" --no-audio
 ```
 
-### With Custom Note Type
-
+**With Custom Deck:**
 ```bash
-docker-compose run --rm anki-vocab "ubiquitous" --model "Basic (and reversed card)"
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "eloquent" --deck "Advanced English"
 ```
 
-### With Custom Voice
+**With Custom Note Type:**
+```bash
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "ubiquitous" --model "Basic (and reversed card)"
+```
 
+**With Custom Voice:**
 Choose from Amazon Polly's available voices:
 - English voices: Joanna, Matthew, Amy, Brian, Joey, Justin, etc.
 - Japanese voices: Mizuki, Takumi
 ```bash
-docker-compose run --rm anki-vocab "eloquent" --voice "Matthew"
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "eloquent" --voice "Matthew"
 ```
 
-### Delete a Word
-
-Delete cards containing a specific word from your deck:
+**With Specific Japanese Meanings:**
 ```bash
-docker-compose run --rm anki-vocab "serendipity" --delete
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "run" --japanese-meaning "走る,経営する"
 ```
 
-The tool will:
-1. Search for all cards containing the word
-2. Show you what will be deleted
-3. Ask for confirmation before deleting
+**Delete a Word:**
+```bash
+docker compose -f docker-compose.ts.yml run --rm anki-vocab "serendipity" --delete
+```
 
-### Using Docker Directly (without docker-compose)
+### Local Development
 
 ```bash
-docker run --rm -it \
-  -e OPENAI_API_KEY="your-api-key" \
-  -e ANKI_HOST="host.docker.internal" \
-  --add-host=host.docker.internal:host-gateway \
-  anki-ai-vocab:latest "vocabulary"
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev "word"
+
+# Build TypeScript
+npm run build
+
+# Run built version
+npm start "word"
+
+# Run tests
+npm test
+
+# Lint code
+npm run lint
+```
+
+### Debug Scripts
+
+Test your environment setup:
+
+```bash
+# Check environment variables
+npm run dev src/debug/debugEnv.ts
+
+# Test AWS Polly integration
+npm run dev src/debug/testPolly.ts
 ```
 
 ## Configuration
@@ -142,7 +177,7 @@ You can configure the tool using environment variables in your `.env` file:
 - `ANKI_HOST`: Anki host address (default: `host.docker.internal`)
 - `ANKI_PORT`: AnkiConnect port (default: `8765`)
 - `DECK_NAME`: Default Anki deck name (default: `English Vocabulary`)
-- `MODEL_NAME`: Default Anki note model (default: `Basic`)
+- `MODEL_NAME`: Default Anki note model (default: `Basic (and reversed card)`)
 
 ### Platform-Specific Settings
 
@@ -150,7 +185,7 @@ You can configure the tool using environment variables in your `.env` file:
 The default configuration should work. Docker Desktop provides `host.docker.internal` to access the host machine.
 
 **For Linux:**
-Edit `docker-compose.yml` and:
+Edit `docker-compose.ts.yml` and:
 1. Uncomment the `network_mode: "host"` line
 2. Comment out the `extra_hosts` section
 3. Change `ANKI_HOST` in `.env` to `localhost`
@@ -158,23 +193,46 @@ Edit `docker-compose.yml` and:
 ## Example Output
 
 ```
-$ docker-compose run --rm anki-vocab "ubiquitous"
+$ docker compose -f docker-compose.ts.yml run --rm anki-vocab "ubiquitous"
 Fetching information for 'ubiquitous'...
 
+Using note type 'Basic (and reversed card)' with fields: Front, Back
+
 Word information retrieved:
-  Japanese: 遍在する、至る所にある
-  English: 
-    1. [adjective] Present, appearing, or found everywhere
+  Japanese:
+    1. 遍在する
+    2. 至る所にある
+  English:
+    1. [adjective] present, appearing, or found everywhere
   IPA: /juːˈbɪkwɪtəs/
   Idiom: N/A
-  Example: Smartphones have become ubiquitous in modern society.
+  Example:
+    1. Smartphones have become ubiquitous in modern society.
+  Similar Words:
+    1. omnipresent: more formal, often used in religious contexts
+       → より正式で、宗教的な文脈でよく使われる
+    2. pervasive: suggests spreading throughout something
+       → 何かに浸透していることを示唆する
 
 Generating audio with voice 'Matthew'...
-✓ Audio files generated successfully
+✓ Audio files generated successfully (2 files: 1 word + 1 examples)
 
 Adding to Anki...
+  Field 'Front' contains audio tags
+  Field 'Back' contains audio tags
 ✓ Successfully added 'ubiquitous' with audio to deck 'English Vocabulary' (Note ID: 1234567890)
 ```
+
+## Card Format
+
+The tool creates cards with:
+- **Front**: Word with audio playback, IPA pronunciation
+- **Back**:
+  - English definitions with parts of speech
+  - Example sentences with audio playback
+  - Japanese meanings
+  - Idioms/phrases (if any)
+  - Similar words with differences
 
 ## Troubleshooting
 
@@ -185,108 +243,27 @@ Adding to Anki...
 
 - **"OpenAI API key not found"**:
   - Ensure your `.env` file contains the correct API key
-  - The `.env` file should be in the same directory as `docker-compose.yml`
+  - The `.env` file should be in the same directory as `docker-compose.ts.yml`
 
 - **"Duplicate card"**:
   - The word already exists in your deck
   - The tool prevents duplicates by default
 
-## Card Format
+- **Docker build fails**:
+  - Make sure you have enough disk space
+  - Try rebuilding: `docker compose -f docker-compose.ts.yml build --no-cache`
 
-The tool creates cards with:
-- **Front**: Word and IPA pronunciation
-- **Back**:
-  - Word audio playback button (when audio enabled)
-  - Japanese meaning
-  - English definition
-  - Idioms/phrases (if any)
-  - Example sentence
-  - Example sentence audio playback button (when audio enabled)
+## Technical Details
 
-## Development
-
-To modify the tool:
-1. Edit the Python script (`anki_vocab.py`)
-2. Rebuild the Docker image: `docker-compose build`
-3. Test your changes
-
-## TypeScript Version
-
-This project is now available in TypeScript with improved type safety and modern JavaScript features!
-
-### TypeScript Features
-
-- **Type Safety**: Full TypeScript type definitions for all APIs and data structures
-- **Modern JavaScript**: ES2022 features with async/await throughout
-- **Better Error Handling**: Structured error types with detailed error messages
-- **Improved Performance**: Optimized async operations and better memory management
-- **Enhanced Development Experience**: Better IDE support and autocomplete
-
-### Using the TypeScript Version
-
-The TypeScript version provides the same functionality as the Python version with improved reliability and developer experience.
-
-#### Build and Run TypeScript Version
-
-```bash
-# Build the TypeScript version
-docker-compose -f docker-compose.ts.yml build
-
-# Run with TypeScript version
-docker-compose -f docker-compose.ts.yml run --rm anki-vocab-ts "serendipity"
-
-# Interactive mode
-docker-compose -f docker-compose.ts.yml run --rm anki-vocab-ts --interactive
-```
-
-#### Development with TypeScript
-
-```bash
-# Install dependencies
-npm install
-
-# Run in development mode
-npm run dev "word"
-
-# Build for production
-npm run build
-
-# Run built version
-npm start "word"
-
-# Run tests
-npm test
-
-# Lint code
-npm run lint
-```
-
-#### Debug Scripts
-
-Test your environment setup:
-
-```bash
-# Check environment variables
-npm run dev src/debug/debugEnv.ts
-
-# Test AWS Polly integration
-npm run dev src/debug/testPolly.ts
-```
-
-### Choosing Between Versions
-
-- **Python Version**: Mature, stable, smaller Docker image
-- **TypeScript Version**: Type-safe, modern features, better development experience
-
-Both versions provide identical functionality and can be used interchangeably.
+- **TypeScript**: Full type safety with comprehensive error handling
+- **Async/Await**: Modern JavaScript async patterns throughout
+- **Modular Architecture**: Organized into separate modules for maintainability
+- **Error Handling**: Structured error types for different failure scenarios
+- **Testing**: Jest framework with TypeScript support
 
 ## Clean Up
 
-To remove the Docker images:
+To remove the Docker image:
 ```bash
-# Remove Python version
 docker rmi anki-ai-vocab:latest
-
-# Remove TypeScript version  
-docker rmi anki-ai-vocab-ts:latest
 ```
