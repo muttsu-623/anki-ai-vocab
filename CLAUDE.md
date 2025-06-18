@@ -10,16 +10,16 @@ Anki AI Vocabulary Builder is a Dockerized CLI tool that automates English vocab
 
 **Docker Commands:**
 ```bash
-docker compose -f docker-compose.ts.yml build
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "word"
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "word" --no-audio
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "word" --deck "Custom Deck"
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "word" --delete
+docker compose build
+docker compose run --rm anki-vocab "word"
+docker compose run --rm anki-vocab "word" --no-audio
+docker compose run --rm anki-vocab "word" --deck "Custom Deck"
+docker compose run --rm anki-vocab "word" --delete
 ```
 
 **Interactive Mode:**
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab --interactive
+docker compose run --rm anki-vocab --interactive
 
 # Interactive commands:
 > add sophisticated

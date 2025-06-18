@@ -22,7 +22,7 @@ COPY src/ ./src/
 RUN npm run build
 
 # Copy entrypoint script
-COPY entrypoint-ts.sh ./entrypoint.sh
+COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x entrypoint.sh
 
 # Create non-root user (allow existing UID)

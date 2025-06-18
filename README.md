@@ -67,7 +67,7 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
 
 4. Build the Docker image:
    ```bash
-   docker compose -f docker-compose.ts.yml build
+   docker compose build
    ```
 
 ## Usage
@@ -76,14 +76,14 @@ A Dockerized command-line tool that automatically adds English vocabulary to you
 
 Add a word to your Anki deck (audio is generated automatically):
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "serendipity"
+docker compose run --rm anki-vocab "serendipity"
 ```
 
 ### Interactive Mode
 
 Enter interactive mode for continuous word processing:
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab --interactive
+docker compose run --rm anki-vocab --interactive
 ```
 
 Interactive commands:
@@ -99,17 +99,17 @@ Interactive commands:
 
 **Without Audio:**
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "serendipity" --no-audio
+docker compose run --rm anki-vocab "serendipity" --no-audio
 ```
 
 **With Custom Deck:**
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "eloquent" --deck "Advanced English"
+docker compose run --rm anki-vocab "eloquent" --deck "Advanced English"
 ```
 
 **With Custom Note Type:**
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "ubiquitous" --model "Basic (and reversed card)"
+docker compose run --rm anki-vocab "ubiquitous" --model "Basic (and reversed card)"
 ```
 
 **With Custom Voice:**
@@ -117,17 +117,17 @@ Choose from Amazon Polly's available voices:
 - English voices: Joanna, Matthew, Amy, Brian, Joey, Justin, etc.
 - Japanese voices: Mizuki, Takumi
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "eloquent" --voice "Matthew"
+docker compose run --rm anki-vocab "eloquent" --voice "Matthew"
 ```
 
 **With Specific Japanese Meanings:**
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "run" --japanese-meaning "走る,経営する"
+docker compose run --rm anki-vocab "run" --japanese-meaning "走る,経営する"
 ```
 
 **Delete a Word:**
 ```bash
-docker compose -f docker-compose.ts.yml run --rm anki-vocab "serendipity" --delete
+docker compose run --rm anki-vocab "serendipity" --delete
 ```
 
 ### Local Development
@@ -185,7 +185,7 @@ You can configure the tool using environment variables in your `.env` file:
 The default configuration should work. Docker Desktop provides `host.docker.internal` to access the host machine.
 
 **For Linux:**
-Edit `docker-compose.ts.yml` and:
+Edit `docker-compose.yml` and:
 1. Uncomment the `network_mode: "host"` line
 2. Comment out the `extra_hosts` section
 3. Change `ANKI_HOST` in `.env` to `localhost`
@@ -193,7 +193,7 @@ Edit `docker-compose.ts.yml` and:
 ## Example Output
 
 ```
-$ docker compose -f docker-compose.ts.yml run --rm anki-vocab "ubiquitous"
+$ docker compose run --rm anki-vocab "ubiquitous"
 Fetching information for 'ubiquitous'...
 
 Using note type 'Basic (and reversed card)' with fields: Front, Back
@@ -243,7 +243,7 @@ The tool creates cards with:
 
 - **"OpenAI API key not found"**:
   - Ensure your `.env` file contains the correct API key
-  - The `.env` file should be in the same directory as `docker-compose.ts.yml`
+  - The `.env` file should be in the same directory as `docker-compose.yml`
 
 - **"Duplicate card"**:
   - The word already exists in your deck
@@ -251,7 +251,7 @@ The tool creates cards with:
 
 - **Docker build fails**:
   - Make sure you have enough disk space
-  - Try rebuilding: `docker compose -f docker-compose.ts.yml build --no-cache`
+  - Try rebuilding: `docker compose build --no-cache`
 
 ## Technical Details
 
