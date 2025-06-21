@@ -335,7 +335,7 @@ export class VocabularyFetcher {
         if (sentence) {
           const exampleAudioBuffer = await this.generateAudio(sentence, {
             voice,
-            speed: 1.0,
+            speed: 0.9,
           });
           const exampleAudio = exampleAudioBuffer.toString("base64");
           exampleAudios.push({
