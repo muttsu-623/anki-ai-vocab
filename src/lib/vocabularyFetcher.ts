@@ -13,6 +13,7 @@ import {
   OpenAIError,
   PollyError,
   ExpressionInfo,
+  Derivative,
 } from "../types";
 
 export class VocabularyFetcher {
@@ -51,6 +52,11 @@ export class VocabularyFetcher {
            Format as an array of objects with "expression", "difference" (in English), and "difference_japanese" keys.
            Example: [{"expression": "big", "difference": "more general term for large size", "difference_japanese": "サイズが大きいことを表す一般的な言葉"}]
            If no similar expressions exist, write "N/A"
+        7. Derivatives (派生語)
+           Provide related words derived from the same root or family as the expression.
+           Format as an array of objects with "word", "part_of_speech", "meaning", and "japanese_meaning" keys.
+           Example: [{"word": "comfortable", "part_of_speech": "adjective", "meaning": "providing physical ease", "japanese_meaning": "快適な"}]
+           If no derivatives exist, write "N/A"
 
         Format the response as JSON with these exact keys:
         - japanese_meaning (array of strings)
@@ -59,6 +65,7 @@ export class VocabularyFetcher {
         - idiom (array of objects with "english" and "japanese" keys, or "N/A" if none)
         - example_sentence (array of strings)
         - similar_expressions (array of objects with "expression", "difference", and "difference_japanese" keys, or "N/A" if none)
+        - derivatives (array of objects with "word", "part_of_speech", "meaning", and "japanese_meaning" keys, or "N/A" if none)
 
         Remember: Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.
         `;
@@ -127,6 +134,8 @@ export class VocabularyFetcher {
         5. Example sentences: Provide ONLY example sentences that use the expression in the context of the specified Japanese meanings
         6. Similar expressions: Provide ONLY expressions that are similar when used in the context of the specified Japanese meanings
            Format as an array of objects with "expression", "difference" (in English), and "difference_japanese" keys.
+        7. Derivatives: Provide derivatives ONLY if they relate to the specified Japanese meanings
+           Format as an array of objects with "word", "part_of_speech", "meaning", and "japanese_meaning" keys.
 
         Format the response as JSON with these exact keys:
         - japanese_meaning (array of strings - use ONLY the provided meanings)
@@ -135,6 +144,7 @@ export class VocabularyFetcher {
         - idiom (always "N/A")
         - example_sentence (array of strings - only for the specified meanings)
         - similar_expressions (array of objects with "expression", "difference", and "difference_japanese" keys, or "N/A" if none)
+        - derivatives (array of objects with "word", "part_of_speech", "meaning", and "japanese_meaning" keys, or "N/A" if none)
 
         Remember:
         - Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.

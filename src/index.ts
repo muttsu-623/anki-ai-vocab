@@ -293,6 +293,24 @@ function displayExpressionInfo(expressionInfo: ExpressionInfo): void {
     console.log(`  Example: ${exampleDisplay}`);
   }
 
+  // Handle derivatives display
+  const derivativeDisplay = expressionInfo.derivatives;
+  if (Array.isArray(derivativeDisplay)) {
+    console.log('  Derivatives:');
+    derivativeDisplay.forEach((derivative, i) => {
+      if (typeof derivative === 'object' && 'word' in derivative) {
+        console.log(`    ${i + 1}. ${derivative.word} [${derivative.part_of_speech}]: ${derivative.meaning || ''}`);
+        if (derivative.japanese_meaning) {
+          console.log(`       → ${derivative.japanese_meaning}`);
+        }
+      } else {
+        console.log(`    ${i + 1}. ${derivative}`);
+      }
+    });
+  } else if (derivativeDisplay !== 'N/A') {
+    console.log(`  Derivatives: ${derivativeDisplay}`);
+  }
+
   // Handle similar expressions display
   const similarDisplay = expressionInfo.similar_expressions;
   if (Array.isArray(similarDisplay)) {

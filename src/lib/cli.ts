@@ -2,7 +2,7 @@ import * as readline from 'readline';
 import { AnkiConnector } from './ankiConnector';
 import { VocabularyFetcher } from './vocabularyFetcher';
 import { parseJapaneseMeanings, createAnkiFields } from './utils';
-import { Config, ExpressionInfo, AnkiAudioFile, WordIdiom, SimilarExpression } from '../types';
+import { Config, ExpressionInfo, AnkiAudioFile, WordIdiom, SimilarExpression, Derivative } from '../types';
 
 export class InteractiveSession {
   private anki: AnkiConnector;
@@ -67,15 +67,18 @@ export class InteractiveSession {
       console.log('Interactive Mode - Anki AI Vocabulary Builder');
       console.log('='.repeat(50));
       console.log('Commands:');
-      console.log('  add <expression> [japanese-meanings]  - Add a word or phrase to your deck');
+      console.log('  <expression>                          - Add a word or phrase to your deck');
+      console.log('  <expression> -r                       - Remove cards containing the expression');
+      console.log('  <expression> --remove                 - Remove cards containing the expression');
       console.log('    Examples:');
-      console.log('      add sophisticated');
-      console.log('      add participate in');
-      console.log('      add attribute A to B AをBのせいにする');
-      console.log('      add sophisticated 洗練された,上品な');
-      console.log('  delete <expression>                   - Delete cards containing the expression');
-      console.log('  help                            - Show this help message');
-      console.log('  quit                            - Exit interactive mode');
+      console.log('      sophisticated                     # Add word');
+      console.log('      sophisticated -r                  # Remove word');
+      console.log('      participate in                    # Add phrase');
+      console.log('      participate in -r                 # Remove phrase');
+      console.log('      attribute A to B AをBのせいにする    # Add with Japanese meaning');
+      console.log('      sophisticated 洗練された,上品な        # Add with Japanese meanings');
+      console.log('  help                                  - Show this help message');
+      console.log('  quit                                  - Exit interactive mode');
       console.log('='.repeat(50));
 
       await this.interactiveLoop();
@@ -95,21 +98,17 @@ export class InteractiveSession {
           continue;
         }
 
-        const parts = userInput.trim().split(/\s+/);
-        const command = parts[0]?.toLowerCase();
-
-        if (command === 'quit' || command === 'exit') {
+        const trimmedInput = userInput.trim();
+        
+        // Check for quit/exit commands first
+        if (trimmedInput.toLowerCase() === 'quit' || trimmedInput.toLowerCase() === 'exit') {
           console.log('Goodbye!');
           break;
-        } else if (command === 'help') {
+        } else if (trimmedInput.toLowerCase() === 'help') {
           this.showHelp();
-        } else if (command === 'add') {
-          await this.handleAddCommand(parts);
-        } else if (command === 'delete') {
-          await this.handleDeleteCommand(parts);
         } else {
-          console.log(`Unknown command: ${command}`);
-          console.log("Type 'help' for available commands");
+          // Direct input handling
+          await this.handleDirectInput(trimmedInput);
         }
       } catch (error) {
         if (error instanceof Error && error.message.includes('SIGINT')) {
@@ -127,25 +126,33 @@ export class InteractiveSession {
     });
   }
 
-  private showHelp(): void {
-    console.log('\nCommands:');
-    console.log('  add <expression> [japanese-meanings]  - Add a word or phrase to your deck');
-    console.log('    Examples:');
-    console.log('      add sophisticated');
-    console.log('      add participate in');
-    console.log('      add attribute A to B AをBのせいにする');
-    console.log('      add sophisticated 洗練された,上品な');
-    console.log('  delete <expression>                   - Delete cards containing the expression');
-    console.log('  help                            - Show this help message');
-    console.log('  quit                            - Exit interactive mode');
+  private async handleDirectInput(input: string): Promise<void> {
+    // Check for -r or --remove flags
+    const removeRegex = /\s+(-r|--remove)(\s|$)/;
+    const hasRemoveFlag = removeRegex.test(input);
+    
+    if (hasRemoveFlag) {
+      // Remove the flag and handle as deletion
+      const expression = input.replace(removeRegex, ' ').trim();
+      if (!expression) {
+        console.log('Usage: <expression> -r');
+        console.log('  Example: sophisticated -r');
+        return;
+      }
+      await this.handleDirectDelete(expression);
+    } else {
+      // Handle as addition
+      await this.handleDirectAdd(input);
+    }
   }
 
-  private async handleAddCommand(parts: string[]): Promise<void> {
-    const argString = parts.slice(1).join(' ').trim();
+  private async handleDirectAdd(input: string): Promise<void> {
+    // Same logic as handleAddCommand but without the "add" prefix
+    const argString = input.trim();
     if (!argString) {
-      console.log('Usage: add <expression> [japanese-meanings]');
-      console.log('  Example: add participate in');
-      console.log('  Example: add attribute A to B AをBのせいにする');
+      console.log('Usage: <expression> [japanese-meanings]');
+      console.log('  Example: participate in');
+      console.log('  Example: attribute A to B AをBのせいにする');
       return;
     }
 
@@ -165,8 +172,8 @@ export class InteractiveSession {
     }
 
     if (!expression) {
-      console.log('Usage: add <expression> [japanese-meanings]');
-      console.log('  Example: add participate in');
+      console.log('Usage: <expression> [japanese-meanings]');
+      console.log('  Example: participate in');
       return;
     }
     
@@ -260,13 +267,7 @@ export class InteractiveSession {
     }
   }
 
-  private async handleDeleteCommand(parts: string[]): Promise<void> {
-    const expression = parts.slice(1).join(' ').trim();
-    if (!expression) {
-      console.log('Usage: delete <expression>');
-      return;
-    }
-    
+  private async handleDirectDelete(expression: string): Promise<void> {
     console.log(`Searching for cards containing '${expression}'...`);
 
     try {
@@ -312,6 +313,23 @@ export class InteractiveSession {
       console.log(`Error deleting '${expression}': ${error}`);
     }
   }
+
+  private showHelp(): void {
+    console.log('\nCommands:');
+    console.log('  <expression>                          - Add a word or phrase to your deck');
+    console.log('  <expression> -r                       - Remove cards containing the expression');
+    console.log('  <expression> --remove                 - Remove cards containing the expression');
+    console.log('    Examples:');
+    console.log('      sophisticated                     # Add word');
+    console.log('      sophisticated -r                  # Remove word');
+    console.log('      participate in                    # Add phrase');
+    console.log('      participate in -r                 # Remove phrase');
+    console.log('      attribute A to B AをBのせいにする    # Add with Japanese meaning');
+    console.log('      sophisticated 洗練された,上品な        # Add with Japanese meanings');
+    console.log('  help                                  - Show this help message');
+    console.log('  quit                                  - Exit interactive mode');
+  }
+
 
   private displayExpressionInfo(expressionInfo: ExpressionInfo): void {
     // Handle Japanese meanings display
@@ -363,6 +381,25 @@ export class InteractiveSession {
       });
     } else {
       console.log(`  Example: ${exampleDisplay}`);
+    }
+
+    // Handle derivatives display
+    const derivativeDisplay = expressionInfo.derivatives;
+    if (Array.isArray(derivativeDisplay)) {
+      console.log('  Derivatives:');
+      derivativeDisplay.forEach((derivative, i) => {
+        if (typeof derivative === 'object' && 'word' in derivative) {
+          const typedDerivative = derivative as Derivative;
+          console.log(`    ${i + 1}. ${typedDerivative.word} [${typedDerivative.part_of_speech}]: ${typedDerivative.meaning || ''}`);
+          if (typedDerivative.japanese_meaning) {
+            console.log(`       → ${typedDerivative.japanese_meaning}`);
+          }
+        } else {
+          console.log(`    ${i + 1}. ${derivative}`);
+        }
+      });
+    } else if (derivativeDisplay !== 'N/A') {
+      console.log(`  Derivatives: ${derivativeDisplay}`);
     }
 
     // Handle similar expressions display

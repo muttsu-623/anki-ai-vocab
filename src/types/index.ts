@@ -56,6 +56,13 @@ export interface SimilarExpression {
   difference_japanese: string;
 }
 
+export interface Derivative {
+  word: string;
+  part_of_speech: string;
+  meaning: string;
+  japanese_meaning: string;
+}
+
 export interface ExpressionInfo {
   japanese_meaning: string[];
   english_meaning: string[];
@@ -63,6 +70,7 @@ export interface ExpressionInfo {
   idiom: WordIdiom[] | "N/A";
   example_sentence: string[];
   similar_expressions: SimilarExpression[] | "N/A";
+  derivatives: Derivative[] | "N/A";
 }
 
 // Audio generation types

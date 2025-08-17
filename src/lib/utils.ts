@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { Config, ExpressionInfo, AnkiAudioFile, WordIdiom, SimilarExpression } from '../types';
+import { Config, ExpressionInfo, AnkiAudioFile, WordIdiom, SimilarExpression, Derivative } from '../types';
 
 export function parseJapaneseMeanings(meaningsStr: string): string[] {
   if (!meaningsStr?.trim()) {
@@ -177,6 +177,36 @@ export function createAnkiFields(
     back += `
         <div style="margin-bottom: 15px;">
             <strong>Idiom/Phrase:</strong> ${idiomHtml}
+        </div>
+        `;
+  }
+
+  // Handle derivatives (list or string)
+  if (expressionInfo.derivatives && expressionInfo.derivatives !== 'N/A') {
+    const derivativeContent = expressionInfo.derivatives;
+    let derivativeHtml: string;
+    
+    if (Array.isArray(derivativeContent)) {
+      const derivativeItems = derivativeContent.map(derivative => {
+        if (typeof derivative === 'object' && 'word' in derivative) {
+          const typedDerivative = derivative as Derivative;
+          const partOfSpeech = typedDerivative.part_of_speech || '';
+          const meaning = typedDerivative.meaning || '';
+          const japaneseMeaning = typedDerivative.japanese_meaning || '';
+          return `<li><strong>${typedDerivative.word}</strong> [${partOfSpeech}]: ${meaning}<br>` +
+                 `<span style='color: #666; margin-left: 20px;'>→ ${japaneseMeaning}</span></li>`;
+        } else {
+          return `<li>${derivative}</li>`;
+        }
+      });
+      derivativeHtml = '<ul style="margin: 5px 0; padding-left: 20px;">' + derivativeItems.join('') + '</ul>';
+    } else {
+      derivativeHtml = derivativeContent;
+    }
+
+    back += `
+        <div style="margin-bottom: 15px; margin-top: 20px; padding: 10px; background-color: #fff5f5; border-radius: 5px; border: 1px solid #ffe0e0;">
+            <strong>Derivatives:</strong> ${derivativeHtml}
         </div>
         `;
   }
