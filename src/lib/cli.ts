@@ -2,7 +2,7 @@ import * as readline from 'readline';
 import { AnkiConnector } from './ankiConnector';
 import { VocabularyFetcher } from './vocabularyFetcher';
 import { parseJapaneseMeanings, createAnkiFields } from './utils';
-import { Config, WordInfo, AnkiAudioFile, WordIdiom, SimilarWord } from '../types';
+import { Config, ExpressionInfo, AnkiAudioFile, WordIdiom, SimilarExpression } from '../types';
 
 export class InteractiveSession {
   private anki: AnkiConnector;
@@ -67,11 +67,13 @@ export class InteractiveSession {
       console.log('Interactive Mode - Anki AI Vocabulary Builder');
       console.log('='.repeat(50));
       console.log('Commands:');
-      console.log('  add <word> [japanese-meanings]  - Add a word to your deck');
+      console.log('  add <expression> [japanese-meanings]  - Add a word or phrase to your deck');
       console.log('    Examples:');
       console.log('      add sophisticated');
+      console.log('      add participate in');
+      console.log('      add attribute A to B AをBのせいにする');
       console.log('      add sophisticated 洗練された,上品な');
-      console.log('  delete <word>                   - Delete cards containing the word');
+      console.log('  delete <expression>                   - Delete cards containing the expression');
       console.log('  help                            - Show this help message');
       console.log('  quit                            - Exit interactive mode');
       console.log('='.repeat(50));
@@ -127,56 +129,64 @@ export class InteractiveSession {
 
   private showHelp(): void {
     console.log('\nCommands:');
-    console.log('  add <word> [japanese-meanings]  - Add a word to your deck');
+    console.log('  add <expression> [japanese-meanings]  - Add a word or phrase to your deck');
     console.log('    Examples:');
     console.log('      add sophisticated');
+    console.log('      add participate in');
+    console.log('      add attribute A to B AをBのせいにする');
     console.log('      add sophisticated 洗練された,上品な');
-    console.log('  delete <word>                   - Delete cards containing the word');
+    console.log('  delete <expression>                   - Delete cards containing the expression');
     console.log('  help                            - Show this help message');
     console.log('  quit                            - Exit interactive mode');
   }
 
   private async handleAddCommand(parts: string[]): Promise<void> {
-    if (parts.length < 2) {
-      console.log('Usage: add <word> [japanese-meanings]');
-      console.log('  Example: add sophisticated');
-      console.log('  Example: add sophisticated 洗練された,上品な');
+    const argString = parts.slice(1).join(' ').trim();
+    if (!argString) {
+      console.log('Usage: add <expression> [japanese-meanings]');
+      console.log('  Example: add participate in');
+      console.log('  Example: add attribute A to B AをBのせいにする');
       return;
     }
 
-    const word = parts[1];
-    if (!word) {
-      console.log('Usage: add <word> [japanese-meanings]');
-      console.log('  Example: add sophisticated');
-      console.log('  Example: add sophisticated 洗練された,上品な');
+    // Regex to find the first Japanese character
+    const japaneseCharRegex = /[　-〿぀-ゟ゠-ヿ＀-ﾟ一-龯㐀-䶿]/;
+    const match = argString.match(japaneseCharRegex);
+
+    let expression: string;
+    let japaneseMeanings: string[] = [];
+
+    if (match && match.index !== undefined) {
+      expression = argString.substring(0, match.index).trim();
+      const japaneseMeaningsStr = argString.substring(match.index).trim();
+      japaneseMeanings = parseJapaneseMeanings(japaneseMeaningsStr);
+    } else {
+      expression = argString;
+    }
+
+    if (!expression) {
+      console.log('Usage: add <expression> [japanese-meanings]');
+      console.log('  Example: add participate in');
       return;
     }
     
-    let japaneseMeanings: string[] = [];
-    
-    // Check if Japanese meanings are provided as additional arguments
-    if (parts.length >= 3) {
-      const japaneseMeaningsStr = parts.slice(2).join(' ');
-      japaneseMeanings = parseJapaneseMeanings(japaneseMeaningsStr);
-    }
-    
     if (japaneseMeanings.length > 0) {
-      console.log(`\nFetching information for '${word}' with specific Japanese meanings: ${japaneseMeanings.join(', ')}`);
+      console.log(`\nFetching information for '${expression}' with specific Japanese meanings: ${japaneseMeanings.join(', ')}`);
     } else {
-      console.log(`\nFetching information for '${word}'...`);
+      console.log(`\nFetching information for '${expression}'...`);
     }
 
     try {
       // Use appropriate method based on whether Japanese meanings are provided
-      let wordInfo: WordInfo;
+      let expressionInfo: ExpressionInfo;
       if (japaneseMeanings.length > 0) {
-        wordInfo = await this.fetcher.getWordInfoWithSpecificMeanings(word, japaneseMeanings);
+        expressionInfo = await this.fetcher.getExpressionInfoWithSpecificMeanings(expression, japaneseMeanings);
       } else {
-        wordInfo = await this.fetcher.getWordInfo(word);
+        expressionInfo = await this.fetcher.getExpressionInfo(expression);
       }
 
-      console.log('Word information retrieved:');
-      this.displayWordInfo(wordInfo);
+      console.log('Expression information retrieved:');
+      this.displayExpressionInfo(expressionInfo);
 
       // Generate audio automatically (unless disabled)
       let audioFiles: AnkiAudioFile[] = [];
@@ -186,19 +196,19 @@ export class InteractiveSession {
         console.log(`Generating audio with voice '${this.voice}'...`);
         try {
           const audioResult = await this.fetcher.generateAudioFiles(
-            word,
-            wordInfo.example_sentence,
+            expression,
+            expressionInfo.example_sentence,
             this.voice
           );
 
           // Create safe filename (same as in createAnkiFields)
-          const safeWord = word.replace(/[ /\\]/g, '_');
+          const safeExpression = expression.replace(/[ /\\]/g, '_');
 
           // Create audio files list
           audioFiles = [
             {
-              filename: `word_${safeWord}.mp3`,
-              data: audioResult.wordAudio,
+              filename: `expression_${safeExpression}.mp3`,
+              data: audioResult.expressionAudio,
               fields: this.fieldNames.length > 0 ? [this.fieldNames[0]!] : []
             }
           ];
@@ -206,7 +216,7 @@ export class InteractiveSession {
           // Add separate audio file for each example sentence
           audioResult.exampleAudios.forEach(exampleAudio => {
             audioFiles.push({
-              filename: `example_${safeWord}_${exampleAudio.index + 1}.mp3`,
+              filename: `example_${safeExpression}_${exampleAudio.index + 1}.mp3`,
               data: exampleAudio.audio,
               fields: this.fieldNames.length > 1 ? [this.fieldNames[1]!] : this.fieldNames
             });
@@ -214,7 +224,7 @@ export class InteractiveSession {
 
           audioGenerated = true;
           const totalFiles = 1 + audioResult.exampleAudios.length;
-          console.log(`✓ Audio files generated successfully (${totalFiles} files: 1 word + ${audioResult.exampleAudios.length} examples)`);
+          console.log(`✓ Audio files generated successfully (${totalFiles} files: 1 expression + ${audioResult.exampleAudios.length} examples)`);
         } catch (error) {
           console.log(`Warning: Failed to generate audio: ${error}`);
           console.log('Continuing without audio...');
@@ -223,7 +233,7 @@ export class InteractiveSession {
 
       console.log('Adding to Anki...');
 
-      const fields = createAnkiFields(word, wordInfo, this.fieldNames, audioFiles);
+      const fields = createAnkiFields(expression, expressionInfo, this.fieldNames, audioFiles);
 
       // Debug: Show field contents
       Object.entries(fields).forEach(([fieldName, fieldContent]) => {
@@ -241,36 +251,31 @@ export class InteractiveSession {
       );
 
       if (audioGenerated && audioFiles.length > 0) {
-        console.log(`✓ Successfully added '${word}' with audio to deck '${this.deckName}' (Note ID: ${noteId})`);
+        console.log(`✓ Successfully added '${expression}' with audio to deck '${this.deckName}' (Note ID: ${noteId})`);
       } else {
-        console.log(`✓ Successfully added '${word}' to deck '${this.deckName}' (Note ID: ${noteId})`);
+        console.log(`✓ Successfully added '${expression}' to deck '${this.deckName}' (Note ID: ${noteId})`);
       }
     } catch (error) {
-      console.log(`Error processing '${word}': ${error}`);
+      console.log(`Error processing '${expression}': ${error}`);
     }
   }
 
   private async handleDeleteCommand(parts: string[]): Promise<void> {
-    if (parts.length < 2) {
-      console.log('Usage: delete <word>');
-      return;
-    }
-
-    const word = parts[1];
-    if (!word) {
-      console.log('Usage: delete <word>');
+    const expression = parts.slice(1).join(' ').trim();
+    if (!expression) {
+      console.log('Usage: delete <expression>');
       return;
     }
     
-    console.log(`Searching for cards containing '${word}'...`);
+    console.log(`Searching for cards containing '${expression}'...`);
 
     try {
       // Build search query - search in all fields and deck
-      const query = `"${word}" deck:"${this.deckName}"`;
+      const query = `"${expression}" deck:"${this.deckName}"`;
       const noteIds = await this.anki.findNotes(query);
 
       if (noteIds.length === 0) {
-        console.log(`No cards found containing '${word}' in deck '${this.deckName}'`);
+        console.log(`No cards found containing '${expression}' in deck '${this.deckName}'`);
         return;
       }
 
@@ -279,7 +284,7 @@ export class InteractiveSession {
       console.log(`\nFound ${noteIds.length} card(s) to delete:`);
 
       notesInfo.forEach(note => {
-        // Extract word from fields (try to get the front field)
+        // Extract expression from fields (try to get the front field)
         const fields = note.fields;
         let displayText: string | undefined;
         
@@ -304,13 +309,13 @@ export class InteractiveSession {
         console.log('Deletion cancelled');
       }
     } catch (error) {
-      console.log(`Error deleting '${word}': ${error}`);
+      console.log(`Error deleting '${expression}': ${error}`);
     }
   }
 
-  private displayWordInfo(wordInfo: WordInfo): void {
+  private displayExpressionInfo(expressionInfo: ExpressionInfo): void {
     // Handle Japanese meanings display
-    const japaneseDisplay = wordInfo.japanese_meaning;
+    const japaneseDisplay = expressionInfo.japanese_meaning;
     if (Array.isArray(japaneseDisplay)) {
       console.log('  Japanese:');
       japaneseDisplay.forEach((meaning, i) => {
@@ -321,7 +326,7 @@ export class InteractiveSession {
     }
 
     // Handle English meanings display
-    const englishDisplay = wordInfo.english_meaning;
+    const englishDisplay = expressionInfo.english_meaning;
     if (Array.isArray(englishDisplay)) {
       console.log('  English:');
       englishDisplay.forEach((meaning, i) => {
@@ -331,10 +336,10 @@ export class InteractiveSession {
       console.log(`  English: ${englishDisplay}`);
     }
 
-    console.log(`  IPA: ${wordInfo.ipa || 'N/A'}`);
+    console.log(`  IPA: ${expressionInfo.ipa || 'N/A'}`);
 
     // Handle idioms display
-    const idiomDisplay = wordInfo.idiom;
+    const idiomDisplay = expressionInfo.idiom;
     if (Array.isArray(idiomDisplay)) {
       console.log('  Idiom:');
       idiomDisplay.forEach((idiom, i) => {
@@ -350,7 +355,7 @@ export class InteractiveSession {
     }
 
     // Handle both string and list for example_sentence display
-    const exampleDisplay = wordInfo.example_sentence;
+    const exampleDisplay = expressionInfo.example_sentence;
     if (Array.isArray(exampleDisplay)) {
       console.log('  Example:');
       exampleDisplay.forEach((example, i) => {
@@ -360,14 +365,14 @@ export class InteractiveSession {
       console.log(`  Example: ${exampleDisplay}`);
     }
 
-    // Handle similar words display
-    const similarDisplay = wordInfo.similar_words;
+    // Handle similar expressions display
+    const similarDisplay = expressionInfo.similar_expressions;
     if (Array.isArray(similarDisplay)) {
-      console.log('  Similar Words:');
+      console.log('  Similar Expressions:');
       similarDisplay.forEach((similar, i) => {
-        if (typeof similar === 'object' && 'word' in similar) {
-          const typedSimilar = similar as SimilarWord;
-          console.log(`    ${i + 1}. ${typedSimilar.word}: ${typedSimilar.difference || ''}`);
+        if (typeof similar === 'object' && 'expression' in similar) {
+          const typedSimilar = similar as SimilarExpression;
+          console.log(`    ${i + 1}. ${typedSimilar.expression}: ${typedSimilar.difference || ''}`);
           if (typedSimilar.difference_japanese) {
             console.log(`       → ${typedSimilar.difference_japanese}`);
           }
@@ -376,7 +381,7 @@ export class InteractiveSession {
         }
       });
     } else if (similarDisplay !== 'N/A') {
-      console.log(`  Similar Words: ${similarDisplay}`);
+      console.log(`  Similar Expressions: ${similarDisplay}`);
     }
   }
 }

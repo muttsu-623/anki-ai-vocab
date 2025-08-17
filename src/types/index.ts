@@ -50,19 +50,19 @@ export interface WordIdiom {
   japanese: string;
 }
 
-export interface SimilarWord {
-  word: string;
+export interface SimilarExpression {
+  expression: string;
   difference: string;
   difference_japanese: string;
 }
 
-export interface WordInfo {
+export interface ExpressionInfo {
   japanese_meaning: string[];
   english_meaning: string[];
   ipa: string;
   idiom: WordIdiom[] | "N/A";
   example_sentence: string[];
-  similar_words: SimilarWord[] | "N/A";
+  similar_expressions: SimilarExpression[] | "N/A";
 }
 
 // Audio generation types
@@ -78,13 +78,13 @@ export interface ExampleAudio {
 }
 
 export interface AudioGenerationResult {
-  wordAudio: string; // base64 encoded
+  expressionAudio: string; // base64 encoded
   exampleAudios: ExampleAudio[];
 }
 
 // CLI types
 export interface CliOptions {
-  word?: string;
+  expression?: string;
   deck?: string;
   model?: string;
   noAudio?: boolean;

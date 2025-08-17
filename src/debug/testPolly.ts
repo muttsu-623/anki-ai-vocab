@@ -37,7 +37,7 @@ async function testPolly(): Promise<void> {
       'Matthew'
     );
     
-    console.log(`✓ Word audio: ${result.wordAudio.length} chars (base64)`);
+    console.log(`✓ Word audio: ${result.expressionAudio.length} chars (base64)`);
     console.log(`✓ Example audios: ${result.exampleAudios.length} files`);
     result.exampleAudios.forEach((audio, i) => {
       console.log(`  - Example ${i + 1}: "${audio.sentence}" (${audio.audio.length} chars base64)`);

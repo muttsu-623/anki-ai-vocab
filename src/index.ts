@@ -8,7 +8,7 @@ import { AnkiConnector } from './lib/ankiConnector';
 import { VocabularyFetcher } from './lib/vocabularyFetcher';
 import { InteractiveSession } from './lib/cli';
 import { loadConfig, parseJapaneseMeanings, createAnkiFields } from './lib/utils';
-import { CliOptions, WordInfo, AnkiAudioFile } from './types';
+import { CliOptions, ExpressionInfo, AnkiAudioFile } from './types';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -19,20 +19,20 @@ program
   .name('anki-ai-vocab')
   .description('Add English vocabulary to Anki deck with AI-generated definitions or delete existing cards')
   .version('1.0.0')
-  .argument('[word]', 'The English word to add or delete (not required in interactive mode)')
+  .argument('[expression]', 'The English expression to add or delete (not required in interactive mode)')
   .option('--deck <name>', 'Anki deck name (overrides config)')
   .option('--model <name>', 'Anki note model name (overrides config)')
   .option('--no-audio', 'Disable automatic audio generation')
   .option('--voice <voice>', 'Amazon Polly voice (Joanna, Matthew, Amy, Brian, Mizuki, Takumi, etc.)', 'Matthew')
-  .option('--japanese-meaning <meanings>', 'Specific Japanese meaning(s) for the word (comma-separated for multiple meanings)')
-  .option('--delete', 'Delete cards containing the word instead of adding')
+  .option('--japanese-meaning <meanings>', 'Specific Japanese meaning(s) for the expression (comma-separated for multiple meanings)')
+  .option('--delete', 'Delete cards containing the expression instead of adding')
   .option('--config', 'Show configuration path')
-  .option('-i, --interactive', 'Enter interactive mode for continuous word processing');
+  .option('-i, --interactive', 'Enter interactive mode for continuous expression processing');
 
 async function main(): Promise<void> {
   program.parse();
-  const options = program.opts<Omit<CliOptions, 'word'>>();
-  const word = program.args[0];
+  const options = program.opts<Omit<CliOptions, 'expression'>>();
+  const expression = program.args[0];
 
   if (options.config) {
     const configPath = path.join(os.homedir(), '.config', 'anki-vocab', 'config.json');
@@ -57,27 +57,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Check if word is provided for non-interactive mode
-  if (!word) {
-    program.error('the following arguments are required: word (unless using --interactive mode)');
+  // Check if expression is provided for non-interactive mode
+  if (!expression) {
+    program.error('the following arguments are required: expression (unless using --interactive mode)');
   }
 
-  // TypeScript assertion since we've checked word exists
-  const wordToProcess = word as string;
+  // TypeScript assertion since we've checked expression exists
+  const expressionToProcess = expression as string;
 
   try {
     const anki = new AnkiConnector(config.anki_host, config.anki_port);
 
     // Delete mode
     if (options.delete) {
-      console.log(`Searching for cards containing '${wordToProcess}'...`);
+      console.log(`Searching for cards containing '${expressionToProcess}'...`);
 
       // Build search query - search in all fields and deck
-      const query = `"${wordToProcess}" deck:"${deckName}"`;
+      const query = `"${expressionToProcess}" deck:"${deckName}"`;
       const noteIds = await anki.findNotes(query);
 
       if (noteIds.length === 0) {
-        console.log(`No cards found containing '${wordToProcess}' in deck '${deckName}'`);
+        console.log(`No cards found containing '${expressionToProcess}' in deck '${deckName}'`);
         process.exit(0);
       }
 
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
       console.log(`\nFound ${noteIds.length} card(s) to delete:`);
 
       notesInfo.forEach(note => {
-        // Extract word from fields (try to get the front field)
+        // Extract expression from fields (try to get the front field)
         const fields = note.fields;
         let displayText: string | undefined;
         
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    console.log(`Fetching information for '${wordToProcess}'...`);
+    console.log(`Fetching information for '${expressionToProcess}'...`);
 
     // Check if model exists
     const availableModels = await anki.getModelNames();
@@ -152,22 +152,22 @@ async function main(): Promise<void> {
     const fetcher = new VocabularyFetcher(config.openai_api_key);
     
     // Check if specific Japanese meanings are provided
-    let wordInfo: WordInfo;
+    let expressionInfo: ExpressionInfo;
     if (options.japaneseMeaning) {
       const japaneseMeanings = parseJapaneseMeanings(options.japaneseMeaning);
       if (japaneseMeanings.length > 0) {
         console.log(`Using specific Japanese meanings: ${japaneseMeanings.join(', ')}`);
-        wordInfo = await fetcher.getWordInfoWithSpecificMeanings(wordToProcess, japaneseMeanings);
+        expressionInfo = await fetcher.getExpressionInfoWithSpecificMeanings(expressionToProcess, japaneseMeanings);
       } else {
         console.log('Warning: Invalid Japanese meanings provided, using default behavior');
-        wordInfo = await fetcher.getWordInfo(wordToProcess);
+        expressionInfo = await fetcher.getExpressionInfo(expressionToProcess);
       }
     } else {
-      wordInfo = await fetcher.getWordInfo(wordToProcess);
+      expressionInfo = await fetcher.getExpressionInfo(expressionToProcess);
     }
 
-    console.log('\nWord information retrieved:');
-    displayWordInfo(wordInfo);
+    console.log('\nExpression information retrieved:');
+    displayExpressionInfo(expressionInfo);
 
     // Generate audio automatically (unless disabled)
     let audioFiles: AnkiAudioFile[] = [];
@@ -177,19 +177,19 @@ async function main(): Promise<void> {
       console.log(`\nGenerating audio with voice '${options.voice || 'Matthew'}'...`);
       try {
         const audioResult = await fetcher.generateAudioFiles(
-          wordToProcess,
-          wordInfo.example_sentence,
+          expressionToProcess,
+          expressionInfo.example_sentence,
           options.voice || 'Matthew'
         );
 
         // Create safe filename (same as in createAnkiFields)
-        const safeWord = wordToProcess.replace(/[ /\\]/g, '_');
+        const safeExpression = expressionToProcess.replace(/[ /\\]/g, '_');
 
         // Create audio files list
         audioFiles = [
           {
-            filename: `word_${safeWord}.mp3`,
-            data: audioResult.wordAudio,
+            filename: `expression_${safeExpression}.mp3`,
+            data: audioResult.expressionAudio,
             fields: fieldNames.length > 0 ? [fieldNames[0]!] : []
           }
         ];
@@ -197,7 +197,7 @@ async function main(): Promise<void> {
         // Add separate audio file for each example sentence
         audioResult.exampleAudios.forEach(exampleAudio => {
           audioFiles.push({
-            filename: `example_${safeWord}_${exampleAudio.index + 1}.mp3`,
+            filename: `example_${safeExpression}_${exampleAudio.index + 1}.mp3`,
             data: exampleAudio.audio,
             fields: fieldNames.length > 1 ? [fieldNames[1]!] : fieldNames
           });
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
 
         audioGenerated = true;
         const totalFiles = 1 + audioResult.exampleAudios.length;
-        console.log(`✓ Audio files generated successfully (${totalFiles} files: 1 word + ${audioResult.exampleAudios.length} examples)`);
+        console.log(`✓ Audio files generated successfully (${totalFiles} files: 1 expression + ${audioResult.exampleAudios.length} examples)`);
       } catch (error) {
         console.log(`Warning: Failed to generate audio: ${error}`);
         console.log('Continuing without audio...');
@@ -214,7 +214,7 @@ async function main(): Promise<void> {
 
     console.log('\nAdding to Anki...');
 
-    const fields = createAnkiFields(wordToProcess, wordInfo, fieldNames, audioFiles);
+    const fields = createAnkiFields(expressionToProcess, expressionInfo, fieldNames, audioFiles);
 
     // Debug: Show field contents
     Object.entries(fields).forEach(([fieldName, fieldContent]) => {
@@ -232,9 +232,9 @@ async function main(): Promise<void> {
     );
 
     if (audioGenerated && audioFiles.length > 0) {
-      console.log(`✓ Successfully added '${wordToProcess}' with audio to deck '${deckName}' (Note ID: ${noteId})`);
+      console.log(`✓ Successfully added '${expressionToProcess}' with audio to deck '${deckName}' (Note ID: ${noteId})`);
     } else {
-      console.log(`✓ Successfully added '${wordToProcess}' to deck '${deckName}' (Note ID: ${noteId})`);
+      console.log(`✓ Successfully added '${expressionToProcess}' to deck '${deckName}' (Note ID: ${noteId})`);
     }
   } catch (error) {
     console.error(`Error: ${error}`);
@@ -242,9 +242,9 @@ async function main(): Promise<void> {
   }
 }
 
-function displayWordInfo(wordInfo: WordInfo): void {
+function displayExpressionInfo(expressionInfo: ExpressionInfo): void {
   // Handle Japanese meanings display
-  const japaneseDisplay = wordInfo.japanese_meaning;
+  const japaneseDisplay = expressionInfo.japanese_meaning;
   if (Array.isArray(japaneseDisplay)) {
     console.log('  Japanese:');
     japaneseDisplay.forEach((meaning, i) => {
@@ -255,7 +255,7 @@ function displayWordInfo(wordInfo: WordInfo): void {
   }
 
   // Handle English meanings display
-  const englishDisplay = wordInfo.english_meaning;
+  const englishDisplay = expressionInfo.english_meaning;
   if (Array.isArray(englishDisplay)) {
     console.log('  English:');
     englishDisplay.forEach((meaning, i) => {
@@ -265,10 +265,10 @@ function displayWordInfo(wordInfo: WordInfo): void {
     console.log(`  English: ${englishDisplay}`);
   }
 
-  console.log(`  IPA: ${wordInfo.ipa || 'N/A'}`);
+  console.log(`  IPA: ${expressionInfo.ipa || 'N/A'}`);
 
   // Handle idioms display
-  const idiomDisplay = wordInfo.idiom;
+  const idiomDisplay = expressionInfo.idiom;
   if (Array.isArray(idiomDisplay)) {
     console.log('  Idiom:');
     idiomDisplay.forEach((idiom, i) => {
@@ -283,7 +283,7 @@ function displayWordInfo(wordInfo: WordInfo): void {
   }
 
   // Handle both string and list for example_sentence display
-  const exampleDisplay = wordInfo.example_sentence;
+  const exampleDisplay = expressionInfo.example_sentence;
   if (Array.isArray(exampleDisplay)) {
     console.log('  Example:');
     exampleDisplay.forEach((example, i) => {
@@ -293,13 +293,13 @@ function displayWordInfo(wordInfo: WordInfo): void {
     console.log(`  Example: ${exampleDisplay}`);
   }
 
-  // Handle similar words display
-  const similarDisplay = wordInfo.similar_words;
+  // Handle similar expressions display
+  const similarDisplay = expressionInfo.similar_expressions;
   if (Array.isArray(similarDisplay)) {
-    console.log('  Similar Words:');
+    console.log('  Similar Expressions:');
     similarDisplay.forEach((similar, i) => {
-      if (typeof similar === 'object' && 'word' in similar) {
-        console.log(`    ${i + 1}. ${similar.word}: ${similar.difference || ''}`);
+      if (typeof similar === 'object' && 'expression' in similar) {
+        console.log(`    ${i + 1}. ${similar.expression}: ${similar.difference || ''}`);
         if (similar.difference_japanese) {
           console.log(`       → ${similar.difference_japanese}`);
         }
@@ -308,7 +308,7 @@ function displayWordInfo(wordInfo: WordInfo): void {
       }
     });
   } else if (similarDisplay !== 'N/A') {
-    console.log(`  Similar Words: ${similarDisplay}`);
+    console.log(`  Similar Expressions: ${similarDisplay}`);
   }
 }
 

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { Config, WordInfo, AnkiAudioFile, WordIdiom, SimilarWord } from '../types';
+import { Config, ExpressionInfo, AnkiAudioFile, WordIdiom, SimilarExpression } from '../types';
 
 export function parseJapaneseMeanings(meaningsStr: string): string[] {
   if (!meaningsStr?.trim()) {
@@ -52,31 +52,31 @@ export function loadConfig(): Config {
 }
 
 export function createAnkiFields(
-  word: string,
-  wordInfo: WordInfo,
+  expression: string,
+  expressionInfo: ExpressionInfo,
   fieldNames: string[],
   audioFiles: AnkiAudioFile[] = []
 ): Record<string, string> {
   // Create safe filename (replace spaces and special chars)
-  const safeWord = word.replace(/[ /\\]/g, '_');
+  const safeExpression = expression.replace(/[ /\\]/g, '_');
 
-  // Front field: Word with pronunciation and audio
-  // Find word audio file
-  let wordAudioTag = '';
+  // Front field: Expression with pronunciation and audio
+  // Find expression audio file
+  let expressionAudioTag = '';
   if (audioFiles.length > 0) {
-    const wordAudioFile = audioFiles.find(af => af.filename.startsWith(`word_${safeWord}`));
-    if (wordAudioFile) {
-      wordAudioTag = ` [sound:${wordAudioFile.filename}]`;
+    const expressionAudioFile = audioFiles.find(af => af.filename.startsWith(`expression_${safeExpression}`));
+    if (expressionAudioFile) {
+      expressionAudioTag = ` [sound:${expressionAudioFile.filename}]`;
     }
   }
 
   const front = `
-    <div style="font-size: 24px; font-weight: bold;">${word}${wordAudioTag}</div>
-    <div style="font-size: 18px; color: #666;">${wordInfo.ipa || ''}</div>
+    <div style="font-size: 24px; font-weight: bold;">${expression}${expressionAudioTag}</div>
+    <div style="font-size: 18px; color: #666;">${expressionInfo.ipa || ''}</div>
     `;
 
   // Handle English meanings (list or string)
-  const englishContent = wordInfo.english_meaning;
+  const englishContent = expressionInfo.english_meaning;
   let englishHtml: string;
   if (Array.isArray(englishContent)) {
     englishHtml = '<ul style="margin: 5px 0; padding-left: 20px;">' + 
@@ -86,7 +86,7 @@ export function createAnkiFields(
     englishHtml = englishContent;
   }
 
-  // Back field: Meanings without word audio
+  // Back field: Meanings without expression audio
   let back = `
     <div style="margin-bottom: 15px;">
         <strong>English:</strong> ${englishHtml}
@@ -94,11 +94,11 @@ export function createAnkiFields(
     `;
 
   // Handle both string and list for example_sentence in HTML
-  const exampleContent = wordInfo.example_sentence;
+  const exampleContent = expressionInfo.example_sentence;
 
   // Find example audio files
   const exampleAudioFiles = audioFiles
-    .filter(af => af.filename.startsWith(`example_${safeWord}_`))
+    .filter(af => af.filename.startsWith(`example_${safeExpression}_`))
     .sort((a, b) => a.filename.localeCompare(b.filename));
 
   let exampleHtml: string;
@@ -139,7 +139,7 @@ export function createAnkiFields(
     `;
 
   // Handle Japanese meanings (list or string)
-  const japaneseContent = wordInfo.japanese_meaning;
+  const japaneseContent = expressionInfo.japanese_meaning;
   let japaneseHtml: string;
   if (Array.isArray(japaneseContent)) {
     japaneseHtml = '<ul style="margin: 5px 0; padding-left: 20px;">' + 
@@ -156,8 +156,8 @@ export function createAnkiFields(
     `;
 
   // Handle idioms (list or string)
-  if (wordInfo.idiom && wordInfo.idiom !== 'N/A') {
-    const idiomContent = wordInfo.idiom;
+  if (expressionInfo.idiom && expressionInfo.idiom !== 'N/A') {
+    const idiomContent = expressionInfo.idiom;
     let idiomHtml: string;
     
     if (Array.isArray(idiomContent)) {
@@ -181,18 +181,18 @@ export function createAnkiFields(
         `;
   }
 
-  // Handle similar words (list or string)
-  if (wordInfo.similar_words && wordInfo.similar_words !== 'N/A') {
-    const similarContent = wordInfo.similar_words;
+  // Handle similar expressions (list or string)
+  if (expressionInfo.similar_expressions && expressionInfo.similar_expressions !== 'N/A') {
+    const similarContent = expressionInfo.similar_expressions;
     let similarHtml: string;
     
     if (Array.isArray(similarContent)) {
       const similarItems = similarContent.map(similar => {
-        if (typeof similar === 'object' && 'word' in similar) {
-          const typedSimilar = similar as SimilarWord;
+        if (typeof similar === 'object' && 'expression' in similar) {
+          const typedSimilar = similar as SimilarExpression;
           const difference = typedSimilar.difference || '';
           const differenceJp = typedSimilar.difference_japanese || '';
-          return `<li><strong>${typedSimilar.word}</strong>: ${difference}<br>` +
+          return `<li><strong>${typedSimilar.expression}</strong>: ${difference}<br>` +
                  `<span style='color: #666; margin-left: 20px;'>→ ${differenceJp}</span></li>`;
         } else {
           return `<li>${similar}</li>`;
@@ -205,10 +205,11 @@ export function createAnkiFields(
 
     back += `
         <div style="margin-bottom: 15px; margin-top: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 5px; border: 1px solid #e0e0e0;">
-            <strong>Similar Words & Differences:</strong> ${similarHtml}
+            <strong>Similar Expressions & Differences:</strong> ${similarHtml}
         </div>
         `;
   }
+
 
   // Map to actual field names
   const fields: Record<string, string> = {};

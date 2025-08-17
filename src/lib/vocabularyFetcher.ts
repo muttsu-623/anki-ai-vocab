@@ -12,7 +12,7 @@ import {
   ExampleAudio,
   OpenAIError,
   PollyError,
-  WordInfo,
+  ExpressionInfo,
 } from "../types";
 
 export class VocabularyFetcher {
@@ -31,9 +31,9 @@ export class VocabularyFetcher {
     });
   }
 
-  async getWordInfo(word: string): Promise<WordInfo> {
+  async getExpressionInfo(expression: string): Promise<ExpressionInfo> {
     const prompt = `
-        Please provide the following information for the English word "${word}":
+        Please provide the following information for the English expression "${expression}":
         1. Japanese meaning (日本語の意味、複数可、頻出順に)
         2. English definition (英語の定義、複数可、頻出順に)
            CRITICAL: Each English definition MUST start with the part of speech in square brackets.
@@ -46,11 +46,11 @@ export class VocabularyFetcher {
         4. Common idioms or phrases with Japanese translations (if any, otherwise write "N/A")
            Format as an array of objects with "english" and "japanese" keys
         5. Example sentences (at least one, if possible 2-3, otherwise write "N/A")
-        6. Similar words and their differences (類似語とその違い)
-           Provide 2-3 words that are similar in meaning but have nuanced differences.
-           Format as an array of objects with "word", "difference" (in English), and "difference_japanese" keys.
-           Example: [{"word": "big", "difference": "more general term for large size", "difference_japanese": "サイズが大きいことを表す一般的な言葉"}]
-           If no similar words exist, write "N/A"
+        6. Similar expressions and their differences (類似表現とその違い)
+           Provide 2-3 expressions that are similar in meaning but have nuanced differences.
+           Format as an array of objects with "expression", "difference" (in English), and "difference_japanese" keys.
+           Example: [{"expression": "big", "difference": "more general term for large size", "difference_japanese": "サイズが大きいことを表す一般的な言葉"}]
+           If no similar expressions exist, write "N/A"
 
         Format the response as JSON with these exact keys:
         - japanese_meaning (array of strings)
@@ -58,7 +58,7 @@ export class VocabularyFetcher {
         - ipa (string)
         - idiom (array of objects with "english" and "japanese" keys, or "N/A" if none)
         - example_sentence (array of strings)
-        - similar_words (array of objects with "word", "difference", and "difference_japanese" keys, or "N/A" if none)
+        - similar_expressions (array of objects with "expression", "difference", and "difference_japanese" keys, or "N/A" if none)
 
         Remember: Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.
         `;
@@ -86,7 +86,7 @@ export class VocabularyFetcher {
         throw new OpenAIError("No content received from OpenAI");
       }
 
-      const data = JSON.parse(content) as WordInfo;
+      const data = JSON.parse(content) as ExpressionInfo;
 
       // Ensure english_meaning entries have parts of speech
       if (data.english_meaning && Array.isArray(data.english_meaning)) {
@@ -99,23 +99,23 @@ export class VocabularyFetcher {
     } catch (error) {
       if (error instanceof Error) {
         throw new OpenAIError(
-          `Error fetching word information from OpenAI: ${error.message}`
+          `Error fetching expression information from OpenAI: ${error.message}`
         );
       }
       throw new OpenAIError(
-        "Unknown error occurred while fetching word information"
+        "Unknown error occurred while fetching expression information"
       );
     }
   }
 
-  async getWordInfoWithSpecificMeanings(
-    word: string,
+  async getExpressionInfoWithSpecificMeanings(
+    expression: string,
     japaneseMeanings: string[]
-  ): Promise<WordInfo> {
+  ): Promise<ExpressionInfo> {
     const japaneseMeaningsStr = japaneseMeanings.join(", ");
 
     const prompt = `
-        Please provide the following information for the English word "${word}" ONLY for these specific Japanese meanings: ${japaneseMeaningsStr}
+        Please provide the following information for the English expression "${expression}" ONLY for these specific Japanese meanings: ${japaneseMeaningsStr}
 
         IMPORTANT CONSTRAINTS:
         1. Japanese meaning: Use ONLY the provided meanings: ${japaneseMeaningsStr}
@@ -124,9 +124,9 @@ export class VocabularyFetcher {
            Format: "[part of speech] definition"
         3. IPA pronunciation (same as usual)
         4. Idioms: Skip idioms completely (return "N/A")
-        5. Example sentences: Provide ONLY example sentences that use the word in the context of the specified Japanese meanings
-        6. Similar words: Provide ONLY words that are similar when used in the context of the specified Japanese meanings
-           Format as an array of objects with "word", "difference" (in English), and "difference_japanese" keys.
+        5. Example sentences: Provide ONLY example sentences that use the expression in the context of the specified Japanese meanings
+        6. Similar expressions: Provide ONLY expressions that are similar when used in the context of the specified Japanese meanings
+           Format as an array of objects with "expression", "difference" (in English), and "difference_japanese" keys.
 
         Format the response as JSON with these exact keys:
         - japanese_meaning (array of strings - use ONLY the provided meanings)
@@ -134,7 +134,7 @@ export class VocabularyFetcher {
         - ipa (string)
         - idiom (always "N/A")
         - example_sentence (array of strings - only for the specified meanings)
-        - similar_words (array of objects with "word", "difference", and "difference_japanese" keys, or "N/A" if none)
+        - similar_expressions (array of objects with "expression", "difference", and "difference_japanese" keys, or "N/A" if none)
 
         Remember:
         - Every item in english_meaning MUST begin with [noun], [verb], [adjective], [adverb], etc.
@@ -164,7 +164,7 @@ export class VocabularyFetcher {
         throw new OpenAIError("No content received from OpenAI");
       }
 
-      const data = JSON.parse(content) as WordInfo;
+      const data = JSON.parse(content) as ExpressionInfo;
 
       // Ensure japanese_meaning uses only the specified meanings
       data.japanese_meaning = japaneseMeanings;
@@ -183,11 +183,11 @@ export class VocabularyFetcher {
     } catch (error) {
       if (error instanceof Error) {
         throw new OpenAIError(
-          `Error fetching word information with specific meanings from OpenAI: ${error.message}`
+          `Error fetching expression information with specific meanings from OpenAI: ${error.message}`
         );
       }
       throw new OpenAIError(
-        "Unknown error occurred while fetching word information"
+        "Unknown error occurred while fetching expression information"
       );
     }
   }
@@ -230,7 +230,7 @@ export class VocabularyFetcher {
       } else if (meaningLower.split(" ").pop()?.endsWith("ly")) {
         return `[adverb] ${meaning}`;
       } else {
-        // For single word, it's often an adjective
+        // For single expression, it's often an adjective
         if (
           meaning.split(" ").length <= 5 &&
           !meaning.includes(".") &&
@@ -302,17 +302,17 @@ export class VocabularyFetcher {
   }
 
   async generateAudioFiles(
-    word: string,
+    expression: string,
     exampleSentences: string | string[],
     voice: string = "Matthew"
   ): Promise<AudioGenerationResult> {
     try {
-      // Generate audio for the word (slower speed for clarity)
-      const wordAudioBuffer = await this.generateAudio(word, {
+      // Generate audio for the expression (slower speed for clarity)
+      const expressionAudioBuffer = await this.generateAudio(expression, {
         voice,
         speed: 0.9,
       });
-      const wordAudio = wordAudioBuffer.toString("base64");
+      const expressionAudio = expressionAudioBuffer.toString("base64");
 
       // Generate audio for each example sentence separately
       const exampleAudios: ExampleAudio[] = [];
@@ -347,7 +347,7 @@ export class VocabularyFetcher {
       }
 
       return {
-        wordAudio,
+        expressionAudio,
         exampleAudios,
       };
     } catch (error) {
