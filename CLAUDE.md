@@ -4,17 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Anki AI Vocabulary Builder is a Dockerized CLI tool that automates English vocabulary flashcard creation using OpenAI GPT-4-mini for content generation and AWS Polly for text-to-speech. Implemented in TypeScript with full type safety and modern JavaScript features.
+Anki AI Vocabulary Builder is a Dockerized CLI tool that automates English vocabulary and expression flashcard creation using OpenAI GPT-4-mini for content generation and AWS Polly for text-to-speech. Implemented in TypeScript with full type safety and modern JavaScript features.
 
 ## Common Commands
 
 **Docker Commands:**
 ```bash
 docker compose build
-docker compose run --rm anki-vocab "word"
-docker compose run --rm anki-vocab "word" --no-audio
-docker compose run --rm anki-vocab "word" --deck "Custom Deck"
-docker compose run --rm anki-vocab "word" --delete
+docker compose run --rm anki-vocab "expression"
+docker compose run --rm anki-vocab "participate in"
+docker compose run --rm anki-vocab "expression" --no-audio
+docker compose run --rm anki-vocab "expression" --deck "Custom Deck"
+docker compose run --rm anki-vocab "expression" --delete
 ```
 
 **Interactive Mode:**
@@ -22,9 +23,12 @@ docker compose run --rm anki-vocab "word" --delete
 docker compose run --rm anki-vocab --interactive
 
 # Interactive commands:
-> add sophisticated
-> add sophisticated 洗練された,上品な
-> delete simple
+> sophisticated                     # Add word
+> sophisticated -r                  # Remove word
+> participate in                    # Add phrase
+> participate in -r                 # Remove phrase
+> attribute A to B AをBのせいにする    # Add with Japanese meaning
+> sophisticated 洗練された,上品な        # Add with Japanese meanings
 > help
 > quit
 ```
@@ -32,9 +36,9 @@ docker compose run --rm anki-vocab --interactive
 **Local Development:**
 ```bash
 npm install              # Install dependencies
-npm run dev "word"       # Run in development mode
+npm run dev "expression"       # Run in development mode
 npm run build           # Build TypeScript
-npm start "word"        # Run built version
+npm start "expression"        # Run built version
 npm test               # Run tests
 npm run lint           # Lint code
 ```
@@ -72,13 +76,13 @@ npm run dev src/debug/testPolly.ts    # Test AWS Polly integration
 ## Key Implementation Details
 
 **Audio Generation:**
-- Word audio: Prosody with slow rate (0.9x) for clarity
+- Expression audio: Prosody with slow rate (0.9x) for clarity
 - Sentence audio: Natural speech rate (1.0x)
 - Voices: Matthew (default), Joanna, Amy, Brian, Mizuki (Japanese), Takumi (Japanese)
 
 **Card Format:**
-- Front: Word + IPA + word audio
-- Back: English/Japanese definitions + example sentences with audio + idioms + similar words
+- Front: Expression + IPA + expression audio
+- Back: English/Japanese definitions + example sentences with audio + idioms + similar expressions
 
 **Error Handling:**
 - AnkiConnect connection errors (ensure Anki is running)
