@@ -4,14 +4,229 @@ import { Command } from 'commander';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
+const csv = require('csv-parser');
 import { AnkiConnector } from './lib/ankiConnector';
 import { VocabularyFetcher } from './lib/vocabularyFetcher';
 import { InteractiveSession } from './lib/cli';
 import { loadConfig, parseJapaneseMeanings, createAnkiFields } from './lib/utils';
-import { CliOptions, ExpressionInfo, AnkiAudioFile } from './types';
+import { CliOptions, ExpressionInfo, AnkiAudioFile, CsvRow, BatchProcessingResult } from './types';
 
 // Load environment variables from .env file
 dotenv.config();
+
+// Helper functions for batch processing
+async function readCsvFile(filePath: string): Promise<CsvRow[]> {
+  return new Promise((resolve, reject) => {
+    const rows: CsvRow[] = [];
+    const stream = fs.createReadStream(filePath)
+      .pipe(csv())
+      .on('data', (row: any) => {
+        if (row.expression?.trim()) {
+          rows.push({
+            expression: row.expression.trim(),
+            japanese_meaning: row.japanese_meaning?.trim() || undefined
+          });
+        }
+      })
+      .on('end', () => {
+        resolve(rows);
+      })
+      .on('error', (error: any) => {
+        reject(error);
+      });
+  });
+}
+
+function parseBatchExpressions(batchString: string): CsvRow[] {
+  return batchString
+    .split(',')
+    .map(expr => expr.trim())
+    .filter(expr => expr.length > 0)
+    .map(expr => ({ expression: expr }));
+}
+
+async function processExpression(
+  expression: string,
+  japaneseMeaning: string | undefined,
+  anki: AnkiConnector,
+  fetcher: VocabularyFetcher,
+  deckName: string,
+  modelName: string,
+  fieldNames: string[],
+  voice: string,
+  noAudio: boolean
+): Promise<void> {
+  console.log(`Processing '${expression}'...`);
+
+  let expressionInfo: ExpressionInfo;
+  if (japaneseMeaning) {
+    const japaneseMeanings = parseJapaneseMeanings(japaneseMeaning);
+    if (japaneseMeanings.length > 0) {
+      expressionInfo = await fetcher.getExpressionInfoWithSpecificMeanings(expression, japaneseMeanings);
+    } else {
+      expressionInfo = await fetcher.getExpressionInfo(expression);
+    }
+  } else {
+    expressionInfo = await fetcher.getExpressionInfo(expression);
+  }
+
+  let audioFiles: AnkiAudioFile[] = [];
+  
+  if (!noAudio) {
+    try {
+      const audioResult = await fetcher.generateAudioFiles(
+        expression,
+        expressionInfo.example_sentence,
+        voice
+      );
+
+      const safeExpression = expression.replace(/[ /\\]/g, '_');
+
+      audioFiles = [
+        {
+          filename: `expression_${safeExpression}.mp3`,
+          data: audioResult.expressionAudio,
+          fields: fieldNames.length > 0 ? [fieldNames[0]!] : []
+        }
+      ];
+
+      audioResult.exampleAudios.forEach(exampleAudio => {
+        audioFiles.push({
+          filename: `example_${safeExpression}_${exampleAudio.index + 1}.mp3`,
+          data: exampleAudio.audio,
+          fields: fieldNames.length > 1 ? [fieldNames[1]!] : fieldNames
+        });
+      });
+    } catch (error) {
+      console.log(`Warning: Failed to generate audio for '${expression}': ${error}`);
+    }
+  }
+
+  const fields = createAnkiFields(expression, expressionInfo, fieldNames, audioFiles);
+
+  const noteId = await anki.addNote(
+    deckName,
+    modelName,
+    fields,
+    ['english', 'vocabulary', 'ai-generated'],
+    audioFiles
+  );
+
+  const audioStatus = audioFiles.length > 0 ? ' with audio' : '';
+  console.log(`✓ Added '${expression}'${audioStatus} (Note ID: ${noteId})`);
+}
+
+async function processBatchExpressions(
+  options: Omit<CliOptions, 'expression'>,
+  config: any,
+  deckName: string,
+  modelName: string
+): Promise<void> {
+  if (!config.openai_api_key) {
+    console.log('Error: OpenAI API key not found. Please set OPENAI_API_KEY environment variable or add it to config.');
+    process.exit(1);
+  }
+
+  const anki = new AnkiConnector(config.anki_host, config.anki_port);
+  const fetcher = new VocabularyFetcher(config.openai_api_key);
+
+  // Check if model exists
+  const availableModels = await anki.getModelNames();
+  if (!availableModels.includes(modelName)) {
+    console.log(`Error: Note type '${modelName}' not found in Anki.`);
+    console.log('\nAvailable note types:');
+    availableModels.forEach(model => {
+      console.log(`  - ${model}`);
+    });
+    console.log(`\nYou can specify a different note type with --model "Note Type Name"`);
+    process.exit(1);
+  }
+
+  // Get field names for the model
+  const fieldNames = await anki.getModelFieldNames(modelName);
+  console.log(`Using note type '${modelName}' with fields: ${fieldNames.join(', ')}`);
+
+  let expressions: CsvRow[] = [];
+
+  // Load expressions from CSV or batch string
+  if (options.csv) {
+    console.log(`Reading expressions from CSV file: ${options.csv}`);
+    try {
+      expressions = await readCsvFile(options.csv);
+      console.log(`Found ${expressions.length} expressions in CSV file`);
+    } catch (error) {
+      console.error(`Error reading CSV file: ${error}`);
+      process.exit(1);
+    }
+  } else if (options.batch) {
+    console.log(`Parsing batch expressions: ${options.batch}`);
+    expressions = parseBatchExpressions(options.batch);
+    console.log(`Found ${expressions.length} expressions in batch string`);
+  }
+
+  if (expressions.length === 0) {
+    console.log('No expressions found to process');
+    return;
+  }
+
+  const results: BatchProcessingResult = {
+    successful: 0,
+    failed: 0,
+    errors: []
+  };
+
+  console.log(`\nStarting batch processing of ${expressions.length} expressions...\n`);
+
+  for (let i = 0; i < expressions.length; i++) {
+    const expr = expressions[i];
+    if (!expr) continue;
+    
+    try {
+      console.log(`[${i + 1}/${expressions.length}] Processing '${expr.expression}'...`);
+      
+      await processExpression(
+        expr.expression,
+        expr.japanese_meaning,
+        anki,
+        fetcher,
+        deckName,
+        modelName,
+        fieldNames,
+        options.voice || 'Matthew',
+        options.noAudio || false
+      );
+      
+      results.successful++;
+    } catch (error) {
+      results.failed++;
+      results.errors.push({
+        expression: expr.expression,
+        error: String(error)
+      });
+      console.error(`✗ Failed to process '${expr.expression}': ${error}`);
+    }
+
+    // Add a small delay to avoid overwhelming APIs
+    if (i < expressions.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  console.log('\n' + '='.repeat(50));
+  console.log('BATCH PROCESSING SUMMARY');
+  console.log('='.repeat(50));
+  console.log(`Total expressions: ${expressions.length}`);
+  console.log(`Successful: ${results.successful}`);
+  console.log(`Failed: ${results.failed}`);
+
+  if (results.errors.length > 0) {
+    console.log('\nFailed expressions:');
+    results.errors.forEach(error => {
+      console.log(`  - ${error.expression}: ${error.error}`);
+    });
+  }
+}
 
 const program = new Command();
 
@@ -19,7 +234,7 @@ program
   .name('anki-ai-vocab')
   .description('Add English vocabulary to Anki deck with AI-generated definitions or delete existing cards')
   .version('1.0.0')
-  .argument('[expression]', 'The English expression to add or delete (not required in interactive mode)')
+  .argument('[expression]', 'The English expression to add or delete (not required in interactive/batch mode)')
   .option('--deck <name>', 'Anki deck name (overrides config)')
   .option('--model <name>', 'Anki note model name (overrides config)')
   .option('--no-audio', 'Disable automatic audio generation')
@@ -27,7 +242,9 @@ program
   .option('--japanese-meaning <meanings>', 'Specific Japanese meaning(s) for the expression (comma-separated for multiple meanings)')
   .option('--delete', 'Delete cards containing the expression instead of adding')
   .option('--config', 'Show configuration path')
-  .option('-i, --interactive', 'Enter interactive mode for continuous expression processing');
+  .option('-i, --interactive', 'Enter interactive mode for continuous expression processing')
+  .option('--csv <file>', 'Process expressions from CSV file (columns: expression, japanese_meaning)')
+  .option('--batch <expressions>', 'Process multiple expressions separated by comma');
 
 async function main(): Promise<void> {
   program.parse();
@@ -57,9 +274,15 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Check if expression is provided for non-interactive mode
+  // Handle batch processing modes
+  if (options.csv || options.batch) {
+    await processBatchExpressions(options, config, deckName, modelName);
+    return;
+  }
+
+  // Check if expression is provided for non-interactive/non-batch mode
   if (!expression) {
-    program.error('the following arguments are required: expression (unless using --interactive mode)');
+    program.error('the following arguments are required: expression (unless using --interactive, --csv, or --batch mode)');
   }
 
   // TypeScript assertion since we've checked expression exists
