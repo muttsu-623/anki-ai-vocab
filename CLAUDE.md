@@ -18,6 +18,29 @@ docker compose run --rm anki-vocab "expression" --deck "Custom Deck"
 docker compose run --rm anki-vocab "expression" --delete
 ```
 
+**Batch Processing:**
+```bash
+# Process multiple expressions from comma-separated list
+docker compose run --rm anki-vocab --batch "sophisticated,participate in,attribute"
+
+# Process expressions from CSV file (columns: expression, japanese_meaning)
+docker compose run --rm anki-vocab --csv expressions.csv
+
+# Batch processing with options
+docker compose run --rm anki-vocab --batch "word1,word2,word3" --no-audio --deck "Batch Deck"
+```
+
+**CSV File Format:**
+```csv
+expression,japanese_meaning
+sophisticated,洗練された,上品な
+participate in,参加する
+attribute,属性,特徴
+```
+- Required column: `expression` (the English word/phrase)
+- Optional column: `japanese_meaning` (comma-separated Japanese meanings)
+- Header row is required
+
 **Interactive Mode:**
 ```bash
 docker compose run --rm anki-vocab --interactive
@@ -37,6 +60,8 @@ docker compose run --rm anki-vocab --interactive
 ```bash
 npm install              # Install dependencies
 npm run dev "expression"       # Run in development mode
+npm run dev -- --batch "word1,word2"  # Batch processing in dev mode
+npm run dev -- --csv expressions.csv  # CSV processing in dev mode
 npm run build           # Build TypeScript
 npm start "expression"        # Run built version
 npm test               # Run tests
