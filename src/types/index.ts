@@ -101,6 +101,20 @@ export interface CliOptions {
   delete?: boolean;
   config?: boolean;
   interactive?: boolean;
+  csv?: string;
+  batch?: string;
+}
+
+// Batch processing types
+export interface CsvRow {
+  expression: string;
+  japanese_meaning?: string;
+}
+
+export interface BatchProcessingResult {
+  successful: number;
+  failed: number;
+  errors: { expression: string; error: string }[];
 }
 
 // Error types
